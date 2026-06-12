@@ -1,0 +1,7 @@
+export { createCaptions } from './captions.js'
+export { createZoom } from './zoom.js'
+export { createThumbnails } from './thumbnails.js'
+export { createAutoplay } from './autoplay.js'
+export { createTransform } from './transform.js'
+export { createDownload } from './download.js'
+export { createFullscreen } from './fullscreen.js'
