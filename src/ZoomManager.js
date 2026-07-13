@@ -75,13 +75,19 @@ export class ZoomManager {
 
   /**
    * @param {{ emit(event: string, data?: any): void }} emitter
-   * @param {import('./types').ExposeOptions} options
+   * @param {{ zoomMin?: number, zoomMax?: number, zoomStep?: number }} options
    */
   constructor(emitter, options) {
     this.#emitter = emitter
     this.#minScale = options.zoomMin ?? 1
     this.#maxScale = options.zoomMax ?? 4
     this.#step = options.zoomStep ?? 0.5
+    if (!Number.isFinite(this.#minScale) || !Number.isFinite(this.#maxScale)
+      || !Number.isFinite(this.#step) || this.#minScale < 1
+      || this.#maxScale < this.#minScale || this.#step <= 0) {
+      throw new RangeError('Zoom options must satisfy 1 <= zoomMin <= zoomMax and zoomStep > 0')
+    }
+    this.#scale = this.#minScale
 
     this.#onWheel = (e) => this.#handleWheel(e)
     this.#onPointerDown = (e) => this.#handlePointerDown(e)
@@ -113,6 +119,7 @@ export class ZoomManager {
 
   detach() {
     if (!this.#container) return
+    this.#releasePointers()
 
     this.#container.removeEventListener('wheel', this.#onWheel)
     this.#container.removeEventListener('pointerdown', this.#onPointerDown)
@@ -125,10 +132,13 @@ export class ZoomManager {
     this.#container = null
     this.#target = null
     this.#pointers.clear()
+    this.#isPanning = false
+    this.#lastClickTime = 0
   }
 
   reset() {
-    this.#scale = 1
+    this.#releasePointers()
+    this.#scale = this.#minScale
     this.#translateX = 0
     this.#translateY = 0
     this.#isPanning = false
@@ -151,6 +161,7 @@ export class ZoomManager {
 
   destroy() {
     this.detach()
+    this.#emitter = { emit() {} }
   }
 
   /**
@@ -194,15 +205,16 @@ export class ZoomManager {
   }
 
   #clampTranslation() {
-    if (!this.#target || !this.#container || this.#scale <= 1) {
+    if (!this.#target || !this.#container || this.#scale <= this.#minScale) {
       this.#translateX = 0
       this.#translateY = 0
       return
     }
 
     const rect = this.#container.getBoundingClientRect()
-    const maxTX = (this.#scale - 1) * rect.width / 2
-    const maxTY = (this.#scale - 1) * rect.height / 2
+    const relativeScale = this.#scale / this.#minScale
+    const maxTX = (relativeScale - 1) * rect.width / 2
+    const maxTY = (relativeScale - 1) * rect.height / 2
 
     this.#translateX = clamp(this.#translateX, -maxTX, maxTX)
     this.#translateY = clamp(this.#translateY, -maxTY, maxTY)
@@ -221,30 +233,31 @@ export class ZoomManager {
   /* ── Pointer events (pan + pinch) ── */
   /** @param {PointerEvent} e */
   #handlePointerDown(e) {
-    if (!this.#target) return
+    if (!this.#target || (e.pointerType === 'mouse' && e.button !== 0)) return
 
     this.#pointers.set(e.pointerId, e)
+    this.#container.setPointerCapture(e.pointerId)
 
-    if (this.#pointers.size === 1 && this.#scale > 1) {
+    if (this.#pointers.size === 1 && this.#scale > this.#minScale) {
       // Start pan
       this.#isPanning = true
       this.#panStartX = e.clientX
       this.#panStartY = e.clientY
       this.#panStartTX = this.#translateX
       this.#panStartTY = this.#translateY
-      this.#container.setPointerCapture(e.pointerId)
     } else if (this.#pointers.size === 2) {
       // Start pinch
       this.#isPanning = false
       const [p1, p2] = [...this.#pointers.values()]
       this.#pinchStartDist = this.#pointerDist(p1, p2)
+      if (this.#pinchStartDist <= 0) return
       this.#pinchStartScale = this.#scale
     }
   }
 
   /** @param {PointerEvent} e */
   #handlePointerMove(e) {
-    if (!this.#target) return
+    if (!this.#target || !this.#pointers.has(e.pointerId)) return
 
     this.#pointers.set(e.pointerId, e)
 
@@ -252,6 +265,13 @@ export class ZoomManager {
       // Pinch zoom
       const [p1, p2] = [...this.#pointers.values()]
       const dist = this.#pointerDist(p1, p2)
+      if (this.#pinchStartDist <= 0) {
+        if (dist > 0) {
+          this.#pinchStartDist = dist
+          this.#pinchStartScale = this.#scale
+        }
+        return
+      }
       const ratio = dist / this.#pinchStartDist
 
       const cx = (p1.clientX + p2.clientX) / 2
@@ -270,13 +290,38 @@ export class ZoomManager {
   /** @param {PointerEvent} e */
   #handlePointerUp(e) {
     this.#pointers.delete(e.pointerId)
+    try {
+      if (this.#container?.hasPointerCapture(e.pointerId)) this.#container.releasePointerCapture(e.pointerId)
+    } catch { /* pointer capture may already have ended */ }
 
     if (this.#pointers.size < 2) {
       this.#pinchStartDist = 0
     }
-    if (this.#pointers.size === 0) {
+    if (this.#pointers.size === 1 && this.#scale > this.#minScale) {
+      const remaining = this.#pointers.values().next().value
+      this.#isPanning = true
+      this.#panStartX = remaining.clientX
+      this.#panStartY = remaining.clientY
+      this.#panStartTX = this.#translateX
+      this.#panStartTY = this.#translateY
+    } else if (this.#pointers.size === 0) {
       this.#isPanning = false
     }
+  }
+
+  #releasePointers() {
+    if (!this.#container) {
+      this.#pointers.clear()
+      return
+    }
+    for (const pointerId of this.#pointers.keys()) {
+      try {
+        if (this.#container.hasPointerCapture(pointerId)) this.#container.releasePointerCapture(pointerId)
+      } catch { /* pointer capture may already have ended */ }
+    }
+    this.#pointers.clear()
+    this.#pinchStartDist = 0
+    this.#isPanning = false
   }
 
   /* ── Double-click toggle ── */
@@ -289,7 +334,8 @@ export class ZoomManager {
       if (this.#scale > this.#minScale) {
         this.#setScale(this.#minScale)
       } else {
-        this.#setScale(2, e.clientX, e.clientY)
+        const target = Math.min(this.#maxScale, Math.max(2, this.#minScale + this.#step))
+        this.#setScale(target, e.clientX, e.clientY)
       }
       this.#lastClickTime = 0
     } else {

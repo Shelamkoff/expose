@@ -4,7 +4,7 @@ import type {
   ExposePlugin,
   AnimationObject,
   ExposeEventMap,
-} from './types'
+} from './types.js'
 
 type Handler<T extends any[]> = (...args: T) => void
 

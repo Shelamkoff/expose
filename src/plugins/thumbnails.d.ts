@@ -9,4 +9,4 @@
 export function createThumbnails(options?: {
     width?: number | undefined;
     height?: number | undefined;
-}): import("../types").ExposePlugin;
+}): import("../types.js").ExposePlugin;

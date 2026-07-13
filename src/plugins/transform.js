@@ -99,6 +99,11 @@ export function createTransform() {
 
       unsubs.push(
         context.on('close', () => transforms.clear()),
+        context.on('slides:change', () => {
+          transforms.clear()
+          const entry = context.getSlideElement()
+          if (entry?.transformEl) entry.transformEl.style.transform = ''
+        }),
       )
     },
 

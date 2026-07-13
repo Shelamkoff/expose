@@ -1,4 +1,4 @@
-import { resolveType, extractUrl } from './utils.js'
+import { resolveType, extractUrl, safeImageSrcset, safeMediaUrl } from './utils.js'
 
 /**
  * Creates DOM elements for each slide type.
@@ -29,15 +29,15 @@ export class SlideRenderer {
    * @returns {string | null}
    */
   getThumbUrl(slide) {
-    if (slide.thumb) return slide.thumb
+    if (slide.thumb) return safeMediaUrl(slide.thumb, 'image')
 
     const type = resolveType(slide.src)
     const url = extractUrl(slide.src)
 
-    if (type === 'image' && url) return url
+    if (type === 'image' && url) return safeMediaUrl(url, 'image')
     if (type === 'video') {
       const src = slide.src
-      if (typeof src === 'object' && src !== null && src.poster) return src.poster
+      if (typeof src === 'object' && src !== null && src.poster) return safeMediaUrl(src.poster, 'image')
     }
 
     return null
@@ -50,15 +50,15 @@ export class SlideRenderer {
    */
   getDownloadUrl(slide) {
     if (!slide.download) return null
-    if (typeof slide.download === 'string') return slide.download
-    return extractUrl(slide.src)
+    if (typeof slide.download === 'string') return safeMediaUrl(slide.download, 'download')
+    return safeMediaUrl(extractUrl(slide.src), 'download')
   }
 
   /**
    * @param {import('./types').SlideData} slide
    */
   #renderImage(slide) {
-    const url = extractUrl(slide.src)
+    const url = safeMediaUrl(extractUrl(slide.src), 'image')
     const el = document.createElement('div')
     el.className = 'expose__slide-content expose__slide-content--image'
 
@@ -71,7 +71,8 @@ export class SlideRenderer {
     img.draggable = false
 
     if (typeof slide.src === 'object' && slide.src !== null) {
-      if (slide.src.srcset) img.srcset = slide.src.srcset
+      const srcset = safeImageSrcset(slide.src.srcset)
+      if (srcset) img.srcset = srcset
       if (slide.src.sizes) img.sizes = slide.src.sizes
     }
 
@@ -84,7 +85,7 @@ export class SlideRenderer {
    */
   #renderVideo(slide) {
     const src = slide.src
-    const url = extractUrl(src)
+    const url = safeMediaUrl(extractUrl(src), 'video')
     const el = document.createElement('div')
     el.className = 'expose__slide-content expose__slide-content--video'
 
@@ -101,7 +102,8 @@ export class SlideRenderer {
       if (src.autoplay) video.autoplay = true
       if (src.muted) video.muted = true
       if (src.loop) video.loop = true
-      if (src.poster) video.poster = src.poster
+      const poster = safeMediaUrl(src.poster, 'image')
+      if (poster) video.poster = poster
     }
 
     el.appendChild(video)
@@ -120,7 +122,7 @@ export class SlideRenderer {
    */
   #renderIframe(slide) {
     const src = slide.src
-    const url = extractUrl(src)
+    const url = safeMediaUrl(extractUrl(src), 'iframe')
     const el = document.createElement('div')
     el.className = 'expose__slide-content expose__slide-content--iframe'
 
@@ -160,9 +162,11 @@ export class SlideRenderer {
       let child
       if (result instanceof HTMLElement) {
         child = result
-      } else {
+      } else if (result?.element instanceof HTMLElement) {
         child = result.element
-        cleanup = result.destroy
+        cleanup = typeof result.destroy === 'function' ? () => result.destroy() : undefined
+      } else {
+        throw new TypeError('Render function must return an HTMLElement or { element, destroy? }')
       }
 
       el.appendChild(child)

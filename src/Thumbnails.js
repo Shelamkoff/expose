@@ -29,14 +29,21 @@ export class Thumbnails {
   /** @type {SlideRenderer} */
   #renderer
 
+  /** @type {AbortController | null} */
+  #listenerController = null
+
   /**
    * @param {{ goTo(index: number): void }} callbacks
    * @param {{ thumbnailWidth?: number, thumbnailHeight?: number }} options
    */
   constructor(callbacks, options) {
     this.#callbacks = callbacks
-    this.#width = options.thumbnailWidth || 60
-    this.#height = options.thumbnailHeight || 45
+    this.#width = options.thumbnailWidth ?? 60
+    this.#height = options.thumbnailHeight ?? 45
+    if (!Number.isFinite(this.#width) || this.#width <= 0
+      || !Number.isFinite(this.#height) || this.#height <= 0) {
+      throw new RangeError('Thumbnail dimensions must be positive finite numbers')
+    }
     this.#renderer = new SlideRenderer()
 
     this.#el = document.createElement('div')
@@ -55,8 +62,12 @@ export class Thumbnails {
    * @param {import('./types').SlideData[]} slides
    */
   build(slides) {
+    if (!Array.isArray(slides)) throw new TypeError('Thumbnails: slides must be an array')
+    this.#listenerController?.abort()
+    this.#listenerController = new AbortController()
     this.#track.innerHTML = ''
     this.#thumbs = []
+    this.#activeIndex = -1
 
     for (let i = 0; i < slides.length; i++) {
       const thumb = this.#createThumb(slides[i], i)
@@ -83,6 +94,8 @@ export class Thumbnails {
   }
 
   destroy() {
+    this.#listenerController?.abort()
+    this.#listenerController = null
     this.#track.innerHTML = ''
     this.#thumbs = []
     this.#activeIndex = -1
@@ -97,13 +110,17 @@ export class Thumbnails {
     const el = document.createElement('button')
     el.type = 'button'
     el.className = 'expose__thumb'
+    el.setAttribute('aria-label', `Go to slide ${index + 1}`)
     el.style.width = this.#width + 'px'
     el.style.height = this.#height + 'px'
 
     const thumbUrl = this.#renderer.getThumbUrl(slide)
 
     if (thumbUrl) {
-      const safeUrl = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(thumbUrl) : thumbUrl.replace(/"/g, '\\"')
+      const safeUrl = thumbUrl
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')
+        .replace(/[\r\n]/g, '')
       el.style.backgroundImage = `url("${safeUrl}")`
       el.style.backgroundSize = 'cover'
       el.style.backgroundPosition = 'center'
@@ -114,7 +131,7 @@ export class Thumbnails {
     el.addEventListener('click', (e) => {
       e.stopPropagation()
       this.#callbacks.goTo(index)
-    })
+    }, { signal: this.#listenerController?.signal })
 
     return el
   }

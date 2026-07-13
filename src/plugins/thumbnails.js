@@ -18,6 +18,9 @@ export function createThumbnails(options = {}) {
 
   const width = options.width ?? 60
   const height = options.height ?? 45
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new RangeError('Expose thumbnail dimensions must be positive numbers')
+  }
 
   return {
     name: 'thumbnails',
@@ -46,6 +49,7 @@ export function createThumbnails(options = {}) {
         context.on('slides:change', () => {
           if (thumbnails && ctx) {
             thumbnails.build(ctx.getSlides())
+            thumbnails.setActive(ctx.getIndex())
           }
         }),
 

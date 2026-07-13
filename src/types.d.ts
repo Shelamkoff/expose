@@ -45,13 +45,14 @@ export interface SlideData {
 /* ── Animation ── */
 
 export interface AnimationObject {
-  enter(overlay: HTMLElement, duration: number): Promise<void> | void
-  exit(overlay: HTMLElement, duration: number): Promise<void> | void
+  enter(overlay: HTMLElement, duration: number, signal?: AbortSignal): Promise<void> | void
+  exit(overlay: HTMLElement, duration: number, signal?: AbortSignal): Promise<void> | void
   transition(
     current: HTMLElement,
     next: HTMLElement,
     direction: 1 | -1,
     duration: number,
+    signal?: AbortSignal,
   ): Promise<void> | void
 }
 
@@ -69,7 +70,7 @@ export interface ToolbarButtonConfig {
   onStateChange?(active: boolean): string | void
 }
 
-export type ToolbarItem = string | ToolbarButtonConfig
+export type ToolbarItem = 'counter' | ToolbarButtonConfig
 
 /* ── Plugin system ── */
 
@@ -92,6 +93,7 @@ export interface PluginContext {
   getIndex(): number
   getSlide(): SlideData | null
   getSlides(): SlideData[]
+  getSlideCount(): number
   isOpen(): boolean
   options: Readonly<ExposeOptions>
 

@@ -1,4 +1,4 @@
-import type { SlideData } from './types'
+import type { SlideData } from './types.js'
 
 export interface ThumbnailsCallbacks {
   goTo(index: number): void | Promise<void>

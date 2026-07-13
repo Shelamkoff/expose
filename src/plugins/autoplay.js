@@ -15,13 +15,16 @@ export function createAutoplay(options = {}) {
   let ctx = null
   /** @type {Array<() => void>} */
   let unsubs = []
-  /** @type {ReturnType<typeof setInterval> | null} */
+  /** @type {ReturnType<typeof setTimeout> | null} */
   let timer = null
   let active = false
   /** @type {HTMLElement | null} */
   let bar = null
 
   const interval = options.interval ?? 3000
+  if (!Number.isFinite(interval) || interval <= 0) {
+    throw new RangeError('Expose autoplay interval must be a positive number')
+  }
 
   function showBar() {
     if (!bar) return
@@ -48,9 +51,10 @@ export function createAutoplay(options = {}) {
 
   function start() {
     if (active || !ctx?.isOpen()) return
+    if (ctx.getSlideCount() <= 1) return
     active = true
     const c = ctx
-    timer = setInterval(() => c.next(), interval)
+    schedule(c)
     c.toolbar.setToggleState('autoplay', true)
     showBar()
     c.emit('autoplay:start')
@@ -60,7 +64,7 @@ export function createAutoplay(options = {}) {
     if (!active) return
     active = false
     if (timer) {
-      clearInterval(timer)
+      clearTimeout(timer)
       timer = null
     }
     ctx?.toolbar.setToggleState('autoplay', false)
@@ -71,6 +75,23 @@ export function createAutoplay(options = {}) {
   function toggle() {
     if (active) stop()
     else start()
+  }
+
+  /** @param {import('../types').PluginContext} context */
+  function schedule(context) {
+    if (timer) clearTimeout(timer)
+    if (!active) return
+    timer = setTimeout(async () => {
+      timer = null
+      if (!active || !context.isOpen()) return
+      const slideCount = context.getSlideCount()
+      if (slideCount <= 1 || (!context.options.loop && context.getIndex() >= slideCount - 1)) {
+        stop()
+        return
+      }
+      await context.next()
+      if (active) schedule(context)
+    }, interval)
   }
 
   return {

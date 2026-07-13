@@ -1,5 +1,5 @@
-import type { Expose } from './Expose'
-import type { ExposeOptions } from './types'
+import type { Expose } from './Expose.js'
+import type { ExposeOptions } from './types.js'
 
 export class Toolbar {
   constructor(gallery: Expose, options: ExposeOptions)

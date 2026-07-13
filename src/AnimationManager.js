@@ -13,6 +13,7 @@ export class AnimationManager {
    * @param {number} duration — animation duration in ms
    */
   constructor(duration = 300) {
+    AnimationManager.#validateDuration(duration)
     this.#duration = duration
   }
 
@@ -22,6 +23,12 @@ export class AnimationManager {
    * @param {import('./types').AnimationObject} animation
    */
   static register(name, animation) {
+    if (typeof name !== 'string' || name.trim() === '') {
+      throw new TypeError('Animation name must be a non-empty string')
+    }
+    if (!animation || ['enter', 'exit', 'transition'].some(method => typeof animation[method] !== 'function')) {
+      throw new TypeError('Animation must implement enter, exit, and transition')
+    }
     AnimationManager.#registry.set(name, animation)
   }
 
@@ -36,6 +43,7 @@ export class AnimationManager {
 
   /** @param {number} duration */
   setDuration(duration) {
+    AnimationManager.#validateDuration(duration)
     this.#duration = duration
   }
 
@@ -45,13 +53,13 @@ export class AnimationManager {
    * @param {string} animationName
    * @returns {Promise<void>}
    */
-  async enter(overlay, animationName) {
+  async enter(overlay, animationName, signal) {
     const anim = AnimationManager.#registry.get(animationName)
     if (!anim) {
       overlay.style.opacity = '1'
       return
     }
-    await anim.enter(overlay, this.#duration)
+    await this.#run(() => anim.enter(overlay, this.#duration, signal), signal)
   }
 
   /**
@@ -60,13 +68,13 @@ export class AnimationManager {
    * @param {string} animationName
    * @returns {Promise<void>}
    */
-  async exit(overlay, animationName) {
+  async exit(overlay, animationName, signal) {
     const anim = AnimationManager.#registry.get(animationName)
     if (!anim) {
       overlay.style.opacity = '0'
       return
     }
-    await anim.exit(overlay, this.#duration)
+    await this.#run(() => anim.exit(overlay, this.#duration, signal), signal)
   }
 
   /**
@@ -77,13 +85,37 @@ export class AnimationManager {
    * @param {string} animationName
    * @returns {Promise<void>}
    */
-  async transition(current, next, direction, animationName) {
+  async transition(current, next, direction, animationName, signal) {
     const anim = AnimationManager.#registry.get(animationName)
     if (!anim) {
       current.style.display = 'none'
       next.style.display = ''
       return
     }
-    await anim.transition(current, next, direction, this.#duration)
+    await this.#run(() => anim.transition(current, next, direction, this.#duration, signal), signal)
+  }
+
+  async #run(task, signal) {
+    if (signal?.aborted) return
+    await new Promise((resolve, reject) => {
+      let settled = false
+      const finish = (callback, value) => {
+        if (settled) return
+        settled = true
+        signal?.removeEventListener('abort', onAbort)
+        callback(value)
+      }
+      const onAbort = () => finish(resolve)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      Promise.resolve()
+        .then(() => signal?.aborted ? undefined : task())
+        .then(value => finish(resolve, value), error => finish(reject, error))
+    })
+  }
+
+  static #validateDuration(duration) {
+    if (!Number.isFinite(duration) || duration < 0) {
+      throw new RangeError('Animation duration must be a non-negative finite number')
+    }
   }
 }

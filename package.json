@@ -1,0 +1,37 @@
+{
+  "name": "@shelamkoff/expose",
+  "version": "1.0.0",
+  "description": "Framework-agnostic fullscreen gallery with animations and composable plugins",
+  "type": "module",
+  "sideEffects": ["**/*.css", "**/animations/*.js"],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./styles.css": "./dist/styles/expose.css",
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "README.ru.md", "LICENSE"],
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "test": "node --test",
+    "prepublishOnly": "npm test",
+    "prepack": "npm run build"
+  },
+  "dependencies": { "@shelamkoff/event-bus": "^1.0.0" },
+  "keywords": ["gallery", "lightbox", "fullscreen", "plugins", "framework-agnostic", "esm"],
+  "author": "Shelamkoff",
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shelamkoff/expose.git"
+  },
+  "homepage": "https://github.com/Shelamkoff/expose#readme",
+  "bugs": { "url": "https://github.com/Shelamkoff/expose/issues" },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

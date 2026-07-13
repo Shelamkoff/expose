@@ -25,6 +25,10 @@ export function createZoom(options = {}) {
   const min = options.min ?? 1
   const max = options.max ?? 4
   const step = options.step ?? 0.5
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(step)
+    || min < 1 || max < min || step <= 0) {
+    throw new RangeError('Expose zoom options must satisfy 1 <= min <= max and step > 0')
+  }
 
   /** @param {import('../types').SlideData} slide */
   const isImage = (slide) => ctx?.resolveType(slide.src) === 'image'
@@ -43,7 +47,7 @@ export function createZoom(options = {}) {
 
   function zoomIn() { zoomManager?.zoomIn() }
   function zoomOut() { zoomManager?.zoomOut() }
-  function getScale() { return zoomManager?.getScale() ?? 1 }
+  function getScale() { return zoomManager?.getScale() ?? min }
 
   return {
     name: 'zoom',

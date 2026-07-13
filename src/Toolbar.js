@@ -13,6 +13,9 @@ export class Toolbar {
   #counterNum = null
 
   /** @type {HTMLElement | null} */
+  #counterPrefix = null
+
+  /** @type {HTMLElement | null} */
   #counterSuffix = null
 
   /** @type {number} */
@@ -36,8 +39,19 @@ export class Toolbar {
   /** @type {Map<string, import('./types').ToolbarButtonConfig>} */
   #buttonConfigs = new Map()
 
-  /** @type {() => void} */
+  /** @type {Map<string, AbortController>} */
+  #buttonControllers = new Map()
+
+  /** @type {(() => void) | null} */
   #onClose
+
+  /** @type {AbortController | null} */
+  #closeController = null
+
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  #counterTimer = null
+
+  #destroyed = false
 
   /**
    * @param {import('./types').ExposeOptions} options
@@ -52,6 +66,8 @@ export class Toolbar {
     for (const item of (options.toolbar || [])) {
       if (typeof item === 'string' && item === 'counter') {
         this.#buildCounter()
+      } else if (typeof item === 'object' && item !== null) {
+        this.addButton(item)
       }
     }
 
@@ -71,7 +87,12 @@ export class Toolbar {
    * @param {import('./types').ToolbarButtonConfig} config
    */
   addButton(config) {
-    if (this.#buttons.has(config.name)) return
+    if (this.#destroyed) throw new Error('Toolbar is destroyed')
+    if (!config || typeof config.name !== 'string' || config.name.trim() === ''
+      || typeof config.icon !== 'string' || typeof config.onClick !== 'function') {
+      throw new TypeError('Toolbar button requires a non-empty name, an icon, and onClick()')
+    }
+    if (this.#buttons.has(config.name)) throw new Error(`Toolbar button "${config.name}" already exists`)
 
     this.#buttonConfigs.set(config.name, config)
 
@@ -80,7 +101,10 @@ export class Toolbar {
     btn.className = 'expose__toolbar-btn'
     if (config.className) btn.className += ' ' + config.className
     btn.dataset.name = config.name
-    if (config.title) btn.title = config.title
+    if (config.title) {
+      btn.title = config.title
+    }
+    btn.setAttribute('aria-label', config.title || config.name)
     btn.innerHTML = config.icon
 
     if (config.toggle) {
@@ -88,6 +112,8 @@ export class Toolbar {
       if (config.active) btn.classList.add('expose__toolbar-btn--active')
     }
 
+    const controller = new AbortController()
+    this.#buttonControllers.set(config.name, controller)
     btn.addEventListener('click', (e) => {
       e.stopPropagation()
 
@@ -103,7 +129,7 @@ export class Toolbar {
       }
 
       config.onClick()
-    })
+    }, { signal: controller.signal })
 
     this.#buttons.set(config.name, btn)
 
@@ -121,6 +147,8 @@ export class Toolbar {
   removeButton(name) {
     const btn = this.#buttons.get(name)
     if (btn) {
+      this.#buttonControllers.get(name)?.abort()
+      this.#buttonControllers.delete(name)
       btn.remove()
       this.#buttons.delete(name)
       this.#toggleStates.delete(name)
@@ -138,18 +166,38 @@ export class Toolbar {
     if (!this.#counterEl) return
 
     const num = current + 1
+    const format = this.#options.counterFormat || '{current} / {total}'
+    const currentMarker = '{current}'
+    const currentPosition = format.indexOf(currentMarker)
+
+    // A format without {current} is valid, but has no number to animate.
+    if (currentPosition === -1) {
+      this.#counterEl.textContent = format.replaceAll('{total}', String(total))
+      this.#counterPrefix = null
+      this.#counterNum = null
+      this.#counterSuffix = null
+      this.#lastIndex = current
+      return
+    }
+
+    const prefix = format.slice(0, currentPosition).replaceAll('{total}', String(total))
+    const suffix = format.slice(currentPosition + currentMarker.length).replaceAll('{total}', String(total))
 
     // First render — build structure
     if (this.#lastIndex === -1) {
       this.#counterEl.innerHTML = ''
+
+      this.#counterPrefix = document.createElement('span')
+      this.#counterPrefix.textContent = prefix
 
       this.#counterNum = document.createElement('span')
       this.#counterNum.className = 'expose__counter-num'
       this.#counterNum.textContent = String(num)
 
       this.#counterSuffix = document.createElement('span')
-      this.#counterSuffix.textContent = ` / ${total}`
+      this.#counterSuffix.textContent = suffix
 
+      this.#counterEl.appendChild(this.#counterPrefix)
       this.#counterEl.appendChild(this.#counterNum)
       this.#counterEl.appendChild(this.#counterSuffix)
 
@@ -158,14 +206,17 @@ export class Toolbar {
     }
 
     // Same index — no animation
-    if (this.#lastIndex === current) return
-
-    // Update suffix (in case total changed)
+    // Update surrounding text in case the total changed.
+    if (this.#counterPrefix) {
+      this.#counterPrefix.textContent = prefix
+    }
     if (this.#counterSuffix) {
-      this.#counterSuffix.textContent = ` / ${total}`
+      this.#counterSuffix.textContent = suffix
     }
 
-    const dir = current > this.#lastIndex ? 1 : -1
+    // Same index: update total text without animating the current number.
+    if (this.#lastIndex === current) return
+
     this.#lastIndex = current
 
     const el = this.#counterNum
@@ -176,16 +227,19 @@ export class Toolbar {
 
     // Phase 1: roll out current number
     el.style.transition = `transform ${dur}ms ease-in, opacity ${dur}ms ease-in`
-    el.style.transform = `translateY(${-dir * 100}%)`
+    // The counter always rolls upward, including a last -> first loop.
+    el.style.transform = 'translateY(-100%)'
     el.style.opacity = '0'
 
-    setTimeout(() => {
+    if (this.#counterTimer) clearTimeout(this.#counterTimer)
+    this.#counterTimer = setTimeout(() => {
+      this.#counterTimer = null
       if (this.#counterAnimId !== animId || !this.#counterNum) return
 
       // Swap number, position at entry
       el.style.transition = 'none'
       el.textContent = String(num)
-      el.style.transform = `translateY(${dir * 100}%)`
+      el.style.transform = 'translateY(100%)'
 
       // Force reflow, then phase 2: roll in
       el.offsetHeight // eslint-disable-line no-unused-expressions
@@ -219,41 +273,63 @@ export class Toolbar {
   updateVisibility(slide) {
     for (const [name, rule] of this.#visibilityRules) {
       const btn = this.#buttons.get(name)
-      if (btn) btn.style.display = rule(slide) ? '' : 'none'
+      if (!btn) continue
+      try {
+        btn.style.display = rule(slide) ? '' : 'none'
+      } catch (error) {
+        btn.style.display = 'none'
+        console.error(`Expose: toolbar visibility rule "${name}" failed`, error)
+      }
     }
   }
 
   destroy() {
+    if (this.#destroyed) return
+    this.#destroyed = true
+    for (const controller of this.#buttonControllers.values()) controller.abort()
+    this.#buttonControllers.clear()
+    this.#closeController?.abort()
+    this.#closeController = null
+    if (this.#counterTimer) clearTimeout(this.#counterTimer)
+    this.#counterTimer = null
     this.#buttons.clear()
     this.#toggleStates.clear()
     this.#visibilityRules.clear()
     this.#buttonConfigs.clear()
     this.#counterEl = null
+    this.#counterPrefix = null
     this.#counterNum = null
     this.#counterSuffix = null
     this.#lastIndex = -1
-    this.#counterAnimId = 0
+    this.#counterAnimId += 1
+    this.#onClose = null
     this.#el.innerHTML = ''
+    this.#el.remove()
   }
 
   #buildCounter() {
     const el = document.createElement('span')
     el.className = 'expose__counter'
+    el.setAttribute('aria-live', 'polite')
+    el.setAttribute('aria-atomic', 'true')
     this.#counterEl = el
     this.#el.appendChild(el)
   }
 
   /** @param {() => void} onClose */
   #buildCloseButton(onClose) {
+    if (this.#closeController) return
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'expose__toolbar-btn'
     btn.title = 'Close'
+    btn.setAttribute('aria-label', 'Close')
     btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+    this.#closeController = new AbortController()
     btn.addEventListener('click', (e) => {
       e.stopPropagation()
       onClose()
-    })
+    }, { signal: this.#closeController.signal })
     this.#el.appendChild(btn)
   }
 }

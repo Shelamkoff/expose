@@ -10,17 +10,20 @@ export function createFullscreen() {
   /** @type {Array<() => void>} */
   let unsubs = []
 
-  function toggle() {
+  async function toggle() {
     if (!ctx) return
     const overlay = ctx.getOverlay()
     if (!overlay) return
 
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {})
-      ctx.emit('fullscreen:change', { active: false })
-    } else {
-      overlay.requestFullscreen().catch(() => {})
-      ctx.emit('fullscreen:change', { active: true })
+    try {
+      if (document.fullscreenElement === overlay) {
+        await document.exitFullscreen()
+      } else {
+        if (document.fullscreenElement) await document.exitFullscreen()
+        await overlay.requestFullscreen()
+      }
+    } catch (error) {
+      console.error('Expose: fullscreen request failed', error)
     }
   }
 
@@ -47,6 +50,13 @@ export function createFullscreen() {
           }
         }),
       )
+
+      const onFullscreenChange = () => {
+        const overlay = context.getOverlay()
+        context.emit('fullscreen:change', { active: document.fullscreenElement === overlay })
+      }
+      document.addEventListener('fullscreenchange', onFullscreenChange)
+      unsubs.push(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
     },
 
     destroy() {

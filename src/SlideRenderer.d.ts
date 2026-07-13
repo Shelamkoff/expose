@@ -1,4 +1,4 @@
-import type { SlideData } from './types'
+import type { SlideData } from './types.js'
 
 export class SlideRenderer {
   render(slide: SlideData): { element: HTMLElement; cleanup?: () => void }

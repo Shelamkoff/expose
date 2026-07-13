@@ -1,9 +1,10 @@
-import { EventBus } from '../../event-bus/index.js'
+import { EventBus } from '@shelamkoff/event-bus'
 import { SlideRenderer } from './SlideRenderer.js'
 import { AnimationManager } from './AnimationManager.js'
-import './animations/index.js'
 import { Toolbar } from './Toolbar.js'
 import { lockBodyScroll, unlockBodyScroll, resolveType } from './utils.js'
+
+const ownedPluginInstances = new WeakSet()
 
 /** @type {import('./types').ExposeOptions} */
 const DEFAULTS = {
@@ -17,12 +18,76 @@ const DEFAULTS = {
   counterFormat: '{current} / {total}',
 }
 
+function validateOptions(options) {
+  if (!Number.isFinite(options.animationDuration) || options.animationDuration < 0) {
+    throw new RangeError('Expose: animationDuration must be a non-negative number')
+  }
+  if (!Number.isInteger(options.preload) || options.preload < 0) {
+    throw new RangeError('Expose: preload must be a non-negative integer')
+  }
+  if (!Number.isInteger(options.startIndex) || options.startIndex < 0) {
+    throw new RangeError('Expose: startIndex must be a non-negative integer')
+  }
+  if (typeof options.loop !== 'boolean' || typeof options.closeOnBackdrop !== 'boolean') {
+    throw new TypeError('Expose: loop and closeOnBackdrop must be booleans')
+  }
+  if (typeof options.animation !== 'string' || options.animation.trim() === '') {
+    throw new TypeError('Expose: animation must be a non-empty string')
+  }
+  if (!Array.isArray(options.toolbar)) throw new TypeError('Expose: toolbar must be an array')
+  if (options.plugins !== undefined && !Array.isArray(options.plugins)) {
+    throw new TypeError('Expose: plugins must be an array')
+  }
+  for (const item of options.toolbar) {
+    if (item === 'counter') continue
+    if (!item || typeof item !== 'object' || typeof item.name !== 'string' || item.name.trim() === ''
+      || typeof item.icon !== 'string' || typeof item.onClick !== 'function') {
+      throw new TypeError('Expose: toolbar items must be "counter" or valid button configs')
+    }
+  }
+  if (typeof options.counterFormat !== 'string') throw new TypeError('Expose: counterFormat must be a string')
+  return options
+}
+
+function validateSlide(slide) {
+  if (!slide || typeof slide !== 'object') throw new TypeError('Expose: each slide must be an object')
+  const source = slide.src
+  if (slide.caption !== undefined && typeof slide.caption !== 'string') throw new TypeError('Expose: caption must be a string')
+  if (slide.thumb !== undefined && typeof slide.thumb !== 'string') throw new TypeError('Expose: thumb must be a string')
+  if (slide.alt !== undefined && typeof slide.alt !== 'string') throw new TypeError('Expose: alt must be a string')
+  if (slide.download !== undefined && typeof slide.download !== 'string' && typeof slide.download !== 'boolean') {
+    throw new TypeError('Expose: download must be a string or boolean')
+  }
+  if (typeof source === 'function') return
+  if (typeof source === 'string' && source.trim() !== '') return
+  if (source && typeof source === 'object' && typeof source.url === 'string' && source.url.trim() !== '') {
+    if (source.type !== undefined && !['image', 'video', 'iframe'].includes(source.type)) {
+      throw new TypeError('Expose: unsupported slide source type')
+    }
+    for (const field of ['srcset', 'sizes', 'poster', 'allow', 'sandbox']) {
+      if (source[field] !== undefined && typeof source[field] !== 'string') {
+        throw new TypeError(`Expose: source ${field} must be a string`)
+      }
+    }
+    for (const field of ['autoplay', 'muted', 'loop']) {
+      if (source[field] !== undefined && typeof source[field] !== 'boolean') {
+        throw new TypeError(`Expose: source ${field} must be a boolean`)
+      }
+    }
+    return
+  }
+  throw new TypeError('Expose: slide source must be a URL, source object, or render function')
+}
+
 /**
  * ExposeJS — Lightweight, plugin-based lightbox gallery.
  * Core handles: lifecycle, navigation, slides, DOM skeleton, toolbar, events.
  * Everything else (zoom, keyboard, touch, etc.) is a plugin.
  */
 export class Expose {
+  /** @type {Expose[]} */
+  static #openInstances = []
+
   /** @type {EventBus} */
   #events = new EventBus()
 
@@ -44,6 +109,24 @@ export class Expose {
   /** @type {boolean} */
   #destroyed = false
 
+  /** Invalidates continuations from obsolete asynchronous animations. */
+  #lifecycleVersion = 0
+
+  /** @type {AbortController | null} */
+  #animationController = null
+
+  /** @type {Promise<void> | null} */
+  #closePromise = null
+
+  /** Synchronous guard for close reentrancy before the lifecycle task starts. */
+  #closing = false
+
+  /** @type {boolean} */
+  #bodyScrollLocked = false
+
+  /** @type {HTMLElement | null} */
+  #previousFocus = null
+
   /* ── DOM ── */
   /** @type {HTMLElement | null} */
   #overlay = null
@@ -59,6 +142,9 @@ export class Expose {
 
   /** @type {((e: KeyboardEvent) => void) | null} */
   #keyHandler = null
+
+  /** @type {AbortController | null} */
+  #domController = null
 
   /* ── Touch/swipe state ── */
   /** @type {{ x: number, y: number, time: number } | null} */
@@ -81,11 +167,12 @@ export class Expose {
   /** @type {Toolbar | null} */
   #toolbar = null
 
-  /** @type {import('./types').ToolbarButtonConfig[]} */
-  #pendingButtons = []
+  /** Persistent plugin toolbar registry, reused on every open. */
+  /** @type {Map<string, import('./types').ToolbarButtonConfig>} */
+  #toolbarButtons = new Map()
 
   /* ── Plugins ── */
-  /** @type {Map<string, { plugin: import('./types').ExposePlugin, context: import('./types').PluginContext }>} */
+  /** @type {Map<string, { plugin: import('./types').ExposePlugin, context: import('./types').PluginContext, cleanupContext: () => void }>} */
   #plugins = new Map()
 
   /**
@@ -102,14 +189,29 @@ export class Expose {
    * @param {Partial<import('./types').ExposeOptions>} [options]
    */
   constructor(slides, options = {}) {
+    if (!Array.isArray(slides)) throw new TypeError('Expose: slides must be an array')
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError('Expose: options must be an object')
+    }
+    slides.forEach(validateSlide)
     this.#slides = [...slides]
-    this.#options = { ...DEFAULTS, ...options }
+    this.#options = validateOptions({
+      ...DEFAULTS,
+      ...options,
+      toolbar: (options.toolbar ?? DEFAULTS.toolbar).map(item => (
+        typeof item === 'object' && item !== null ? { ...item } : item
+      )),
+      plugins: options.plugins ? [...options.plugins] : undefined,
+    })
     this.#renderer = new SlideRenderer()
     this.#animationManager = new AnimationManager(this.#options.animationDuration)
 
     if (options.plugins) {
-      for (const plugin of options.plugins) {
-        this.use(plugin)
+      try {
+        for (const plugin of options.plugins) this.use(plugin)
+      } catch (error) {
+        this.destroy()
+        throw error
       }
     }
   }
@@ -122,13 +224,33 @@ export class Expose {
    * @returns {this}
    */
   use(plugin) {
+    if (this.#destroyed) {
+      throw new Error('Cannot install a plugin on a destroyed Expose instance')
+    }
+    if (this.#isOpen) {
+      throw new Error('Cannot install a plugin while Expose is open')
+    }
+    if (!plugin || typeof plugin.name !== 'string' || !plugin.name || typeof plugin.install !== 'function') {
+      throw new TypeError('Plugin must define a non-empty name and an install(context) function')
+    }
     if (this.#plugins.has(plugin.name)) {
       throw new Error(`Plugin "${plugin.name}" is already installed`)
     }
+    if (ownedPluginInstances.has(plugin)) {
+      throw new Error(`Plugin "${plugin.name}" is already owned by another Expose instance`)
+    }
 
-    const context = this.#createPluginContext()
-    this.#plugins.set(plugin.name, { plugin, context })
-    plugin.install(context)
+    const { context, cleanup } = this.#createPluginContext()
+    ownedPluginInstances.add(plugin)
+    try {
+      plugin.install(context)
+      this.#plugins.set(plugin.name, { plugin, context, cleanupContext: cleanup })
+    } catch (error) {
+      try { plugin.destroy?.() } catch { /* preserve the installation error */ }
+      cleanup()
+      ownedPluginInstances.delete(plugin)
+      throw error
+    }
     return this
   }
 
@@ -143,14 +265,32 @@ export class Expose {
 
   /**
    * Create a frozen PluginContext facade.
-   * @returns {import('./types').PluginContext}
+   * @returns {{ context: import('./types').PluginContext, cleanup: () => void }}
    */
   #createPluginContext() {
-    return Object.freeze({
+    const subscriptions = new Set()
+    const toolbarButtons = new Set()
+    const trackSubscription = (unsubscribe) => {
+      let active = true
+      const tracked = () => {
+        if (!active) return
+        active = false
+        subscriptions.delete(tracked)
+        unsubscribe()
+      }
+      subscriptions.add(tracked)
+      return tracked
+    }
+
+    const { plugins: _plugins, ...publicOptions } = this.#options
+    publicOptions.toolbar = Object.freeze((publicOptions.toolbar ?? []).map(item => (
+      typeof item === 'object' && item !== null ? Object.freeze({ ...item }) : item
+    )))
+    const context = Object.freeze({
       // Events
-      on: (event, handler) => this.#events.on(event, handler),
-      once: (event, handler) => this.#events.once(event, handler),
-      emit: (event, data) => this.#events.emit(event, data),
+      on: (event, handler) => trackSubscription(this.#events.on(event, handler)),
+      once: (event, handler) => trackSubscription(this.#events.once(event, handler)),
+      emit: (event, ...args) => this.#events.emit(event, ...args),
 
       // Navigation
       next: () => this.next(),
@@ -162,8 +302,9 @@ export class Expose {
       getIndex: () => this.#currentIndex,
       getSlide: () => this.getSlide(),
       getSlides: () => this.getSlides(),
+      getSlideCount: () => this.#slides.length,
       isOpen: () => this.#isOpen,
-      options: Object.freeze({ ...this.#options }),
+      options: Object.freeze(publicOptions),
 
       // DOM access (live getters)
       getOverlay: () => this.#overlay,
@@ -173,25 +314,47 @@ export class Expose {
         return this.#slideElements.get(i) ?? null
       },
 
-      // Toolbar (buffers buttons if toolbar not yet created)
+      // Toolbar (the registry survives close/open cycles)
       toolbar: Object.freeze({
         add: (button) => {
-          if (this.#toolbar) {
-            this.#toolbar.addButton(button)
-          } else {
-            this.#pendingButtons.push(button)
+          if (!button || typeof button.name !== 'string' || button.name.trim() === ''
+            || typeof button.icon !== 'string' || typeof button.onClick !== 'function') {
+            throw new TypeError('Toolbar button requires a non-empty name, an icon, and onClick()')
           }
+          if (this.#toolbarButtons.has(button.name)) {
+            throw new Error(`Toolbar button "${button.name}" is already registered`)
+          }
+          const config = { ...button }
+          toolbarButtons.add(config.name)
+          this.#toolbarButtons.set(config.name, config)
+          this.#toolbar?.addButton(config)
         },
         remove: (name) => {
-          this.#pendingButtons = this.#pendingButtons.filter(b => b.name !== name)
+          if (!toolbarButtons.has(name)) return
+          toolbarButtons.delete(name)
+          this.#toolbarButtons.delete(name)
           this.#toolbar?.removeButton(name)
         },
-        setToggleState: (name, active) => this.#toolbar?.setToggleState(name, active),
+        setToggleState: (name, active) => {
+          if (toolbarButtons.has(name)) this.#toolbar?.setToggleState(name, active)
+        },
       }),
 
       // Utilities
       resolveType,
     })
+
+    return {
+      context,
+      cleanup: () => {
+        for (const unsubscribe of [...subscriptions]) unsubscribe()
+        for (const name of toolbarButtons) {
+          this.#toolbarButtons.delete(name)
+          this.#toolbar?.removeButton(name)
+        }
+        toolbarButtons.clear()
+      },
+    }
   }
 
   /* ═══════════════ Events ═══════════════ */
@@ -201,7 +364,10 @@ export class Expose {
    * @param {Function} handler
    * @returns {() => void}
    */
-  on(event, handler) { return this.#events.on(event, handler) }
+  on(event, handler) {
+    this.#assertAlive()
+    return this.#events.on(event, handler)
+  }
 
   /**
    * @param {string} event
@@ -214,7 +380,10 @@ export class Expose {
    * @param {Function} handler
    * @returns {() => void}
    */
-  once(event, handler) { return this.#events.once(event, handler) }
+  once(event, handler) {
+    this.#assertAlive()
+    return this.#events.once(event, handler)
+  }
 
   /* ═══════════════ Public API ═══════════════ */
 
@@ -224,47 +393,101 @@ export class Expose {
    * @returns {Promise<void>}
    */
   async open(index) {
-    if (this.#isOpen || this.#destroyed || this.#slides.length === 0) return
+    this.#assertAlive()
+    if (this.#isOpen || this.#slides.length === 0) return
 
     const raw = index ?? this.#options.startIndex ?? 0
+    if (!Number.isInteger(raw)) throw new TypeError('Expose: open index must be an integer')
     this.#currentIndex = Math.max(0, Math.min(raw, this.#slides.length - 1))
     this.#isOpen = true
+    const lifecycleVersion = ++this.#lifecycleVersion
+    this.#previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
 
-    this.#buildDOM()
-    lockBodyScroll()
+    Expose.#openInstances.push(this)
+    try {
+      this.#buildDOM()
+      lockBodyScroll()
+      this.#bodyScrollLocked = true
 
     // Render current + preload neighbors
-    this.#renderSlide(this.#currentIndex)
-    this.#showSlide(this.#currentIndex)
-    this.#preloadNeighbors()
+      this.#renderSlide(this.#currentIndex)
+      this.#showSlide(this.#currentIndex)
+      this.#preloadNeighbors()
 
     // Notify plugins — they add their DOM here
-    this.#events.emit('open', { index: this.#currentIndex })
+      this.#events.emit('open', { index: this.#currentIndex })
 
     // Update toolbar after plugins have registered their buttons
-    this.#updateToolbar()
+      this.#updateToolbar()
+    } catch (error) {
+      this.#releaseOpenResources()
+      this.#isOpen = false
+      throw error
+    }
 
     // Enter animation
     this.#isAnimating = true
-    await this.#animationManager.enter(this.#overlay, this.#options.animation)
-    this.#isAnimating = false
+    const animationController = new AbortController()
+    this.#animationController = animationController
+    try {
+      await this.#animationManager.enter(this.#overlay, this.#options.animation, animationController.signal)
+    } catch (error) {
+      // Custom animations are an extension boundary; their failure must not lock the gallery.
+      if (this.#overlay) this.#overlay.style.opacity = '1'
+      console.error('Expose: enter animation failed', error)
+    } finally {
+      if (this.#animationController === animationController) this.#animationController = null
+      if (this.#lifecycleVersion === lifecycleVersion) this.#isAnimating = false
+    }
 
+    if (this.#destroyed || !this.#isOpen || this.#lifecycleVersion !== lifecycleVersion) return
     this.#events.emit('open:complete', { index: this.#currentIndex })
   }
 
   /** Close the gallery. */
-  async close() {
-    if (!this.#isOpen || this.#isAnimating) return
+  close() {
+    if (!this.#isOpen) return Promise.resolve()
+    if (this.#closing && this.#closePromise) return this.#closePromise
+    this.#closing = true
+    // Start in a microtask so the shared promise exists before close listeners
+    // can re-enter close() or mutate the slide collection.
+    const operation = Promise.resolve().then(() => this.#performClose())
+    this.#closePromise = operation
+    const clear = () => {
+      if (this.#closePromise !== operation) return
+      this.#closePromise = null
+      this.#closing = false
+    }
+    operation.then(clear, clear)
+    return operation
+  }
+
+  async #performClose() {
+    if (this.#destroyed || !this.#isOpen) return
+    const interruptingAnimation = this.#isAnimating
+    const lifecycleVersion = ++this.#lifecycleVersion
+    this.#animationController?.abort()
+    this.#animationController = null
 
     // Notify plugins — they clean up their DOM here
     this.#events.emit('close')
 
-    this.#isAnimating = true
-    await this.#animationManager.exit(this.#overlay, this.#options.animation)
-    this.#isAnimating = false
+    this.#isAnimating = !interruptingAnimation
+    if (!interruptingAnimation) {
+      const animationController = new AbortController()
+      this.#animationController = animationController
+      try {
+        await this.#animationManager.exit(this.#overlay, this.#options.animation, animationController.signal)
+      } catch (error) {
+        console.error('Expose: exit animation failed', error)
+      } finally {
+        if (this.#animationController === animationController) this.#animationController = null
+        if (this.#lifecycleVersion === lifecycleVersion) this.#isAnimating = false
+      }
+    }
 
-    this.#teardownDOM()
-    unlockBodyScroll()
+    if (this.#destroyed || this.#lifecycleVersion !== lifecycleVersion) return
+    this.#releaseOpenResources()
 
     this.#isOpen = false
     this.#events.emit('close:complete')
@@ -291,6 +514,7 @@ export class Expose {
    * @param {number} index
    */
   async goTo(index) {
+    if (!Number.isInteger(index)) throw new TypeError('Expose: slide index must be an integer')
     if (!this.#isOpen || this.#isAnimating) return
     if (index < 0 || index >= this.#slides.length || index === this.#currentIndex) return
     const direction = index > this.#currentIndex ? 1 : -1
@@ -313,16 +537,36 @@ export class Expose {
    * @param {import('./types').SlideData[]} slides
    */
   setSlides(slides) {
+    this.#assertAlive()
+    this.#assertNotClosing()
+    if (!Array.isArray(slides)) throw new TypeError('Expose: slides must be an array')
+    slides.forEach(validateSlide)
     this.#slides = [...slides]
     if (this.#isOpen) {
+      // Invalidate a transition that may still complete against the old slide set.
+      this.#lifecycleVersion += 1
+      this.#animationController?.abort()
+      this.#animationController = null
+      this.#isAnimating = false
       this.#clearSlideElements()
+      if (this.#slides.length === 0) {
+        this.#currentIndex = -1
+        this.#events.emit('slides:change', { slides: [] })
+        void this.close()
+        return
+      }
       this.#currentIndex = Math.min(this.#currentIndex, this.#slides.length - 1)
       this.#renderSlide(this.#currentIndex)
       this.#showSlide(this.#currentIndex)
       this.#preloadNeighbors()
+      this.#syncNavigation()
       this.#updateToolbar()
-      this.#events.emit('slides:change', { slides: this.#slides })
+      this.#events.emit('slide:change', {
+        index: this.#currentIndex,
+        slide: this.#slides[this.#currentIndex],
+      })
     }
+    this.#events.emit('slides:change', { slides: this.getSlides() })
   }
 
   /**
@@ -330,11 +574,15 @@ export class Expose {
    * @param {import('./types').SlideData} slide
    */
   addSlide(slide) {
+    this.#assertAlive()
+    this.#assertNotClosing()
+    validateSlide(slide)
     this.#slides.push(slide)
     if (this.#isOpen) {
+      this.#syncNavigation()
       this.#updateToolbar()
-      this.#events.emit('slides:change', { slides: this.#slides })
     }
+    this.#events.emit('slides:change', { slides: this.getSlides() })
   }
 
   /**
@@ -342,11 +590,16 @@ export class Expose {
    * @param {number} index
    */
   removeSlide(index) {
+    this.#assertAlive()
+    this.#assertNotClosing()
+    if (!Number.isInteger(index)) throw new TypeError('Expose: slide index must be an integer')
     if (index < 0 || index >= this.#slides.length || this.#isAnimating) return
 
     const removed = this.#slideElements.get(index)
     if (removed) {
-      removed.cleanup?.()
+      try { removed.cleanup?.() } catch (error) {
+        console.error('Expose: slide cleanup failed', error)
+      }
       removed.el.remove()
       this.#slideElements.delete(index)
     }
@@ -354,11 +607,15 @@ export class Expose {
     this.#slides.splice(index, 1)
 
     if (this.#slides.length === 0) {
-      this.close()
+      this.#currentIndex = -1
+      this.#events.emit('slides:change', { slides: [] })
+      void this.close()
       return
     }
 
-    if (this.#currentIndex >= this.#slides.length) {
+    if (index < this.#currentIndex) {
+      this.#currentIndex -= 1
+    } else if (this.#currentIndex >= this.#slides.length) {
       this.#currentIndex = this.#slides.length - 1
     }
 
@@ -372,9 +629,14 @@ export class Expose {
 
     if (this.#isOpen) {
       this.#showSlide(this.#currentIndex)
+      this.#syncNavigation()
       this.#updateToolbar()
-      this.#events.emit('slides:change', { slides: this.#slides })
+      this.#events.emit('slide:change', {
+        index: this.#currentIndex,
+        slide: this.#slides[this.#currentIndex],
+      })
     }
+    this.#events.emit('slides:change', { slides: this.getSlides() })
   }
 
   /** @returns {boolean} */
@@ -384,39 +646,70 @@ export class Expose {
   destroy() {
     if (this.#destroyed) return
     this.#destroyed = true
+    this.#lifecycleVersion += 1
+    this.#animationController?.abort()
+    this.#animationController = null
+    this.#closePromise = null
+    this.#closing = false
+    this.#isAnimating = false
 
     // Emit before clearing — plugins and consumers can hear this
     this.#events.emit('destroy')
 
     // Destroy all plugins
-    for (const { plugin } of this.#plugins.values()) {
-      plugin.destroy?.()
+    const plugins = [...this.#plugins.values()]
+    for (let i = plugins.length - 1; i >= 0; i--) {
+      const { plugin, cleanupContext } = plugins[i]
+      try {
+        plugin.destroy?.()
+      } catch (error) {
+        console.error(`Expose: plugin "${plugin.name}" failed to destroy`, error)
+      } finally {
+        cleanupContext()
+        ownedPluginInstances.delete(plugin)
+      }
     }
     this.#plugins.clear()
 
     if (this.#isOpen) {
-      this.#teardownDOM()
-      unlockBodyScroll()
+      this.#releaseOpenResources()
     }
 
     this.#isOpen = false
+    this.#toolbarButtons.clear()
+    this.#slides = []
+    this.#options = {}
     this.#events.clear()
+  }
+
+  #assertAlive() {
+    if (this.#destroyed) throw new Error('Expose is destroyed')
+  }
+
+  #assertNotClosing() {
+    if (this.#closing) throw new Error('Expose is closing')
   }
 
   /* ═══════════════ DOM ═══════════════ */
 
   #buildDOM() {
+    this.#domController = new AbortController()
+    const signal = this.#domController.signal
     // Overlay (root)
     this.#overlay = document.createElement('div')
     this.#overlay.className = 'expose'
     this.#overlay.style.opacity = '0'
+    this.#overlay.setAttribute('role', 'dialog')
+    this.#overlay.setAttribute('aria-modal', 'true')
+    this.#overlay.setAttribute('aria-label', 'Image gallery')
+    this.#overlay.tabIndex = -1
 
     if (this.#options.closeOnBackdrop) {
       this.#overlay.addEventListener('click', (e) => {
         if (e.target === this.#overlay || e.target === this.#slideContainer) {
           this.close()
         }
-      })
+      }, { signal })
     }
 
     // Slide container
@@ -424,19 +717,15 @@ export class Expose {
     this.#slideContainer.className = 'expose__slides'
     this.#overlay.appendChild(this.#slideContainer)
 
-    // Navigation arrows
-    if (this.#slides.length > 1) {
-      this.#navPrev = this.#createNavButton('prev', '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6l6 6"/></svg>', () => this.prev())
-      this.#navNext = this.#createNavButton('next', '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6l-6 6"/></svg>', () => this.next())
-      this.#overlay.appendChild(this.#navPrev)
-      this.#overlay.appendChild(this.#navNext)
-    }
+    this.#syncNavigation()
 
     // Keyboard
     this.#keyHandler = (e) => {
+      if (Expose.#openInstances.at(-1) !== this) return
       if (e.isComposing) return
       switch (e.key) {
         case 'Escape': e.preventDefault(); this.close(); break
+        case 'Tab': this.#trapFocus(e); break
         case 'ArrowLeft': e.preventDefault(); this.prev(); break
         case 'ArrowRight': e.preventDefault(); this.next(); break
         case 'f': case 'F':
@@ -454,14 +743,14 @@ export class Expose {
 
     // Toolbar
     this.#toolbar = new Toolbar(this.#options, { close: () => this.close() })
-    for (const btn of this.#pendingButtons) {
+    for (const btn of this.#toolbarButtons.values()) {
       this.#toolbar.addButton(btn)
     }
-    this.#pendingButtons = []
     this.#toolbar.appendCloseButton()
     this.#overlay.appendChild(this.#toolbar.element)
 
     document.body.appendChild(this.#overlay)
+    this.#overlay.focus({ preventScroll: true })
   }
 
   #teardownDOM() {
@@ -473,6 +762,8 @@ export class Expose {
 
     // Touch/swipe
     this.#unbindTouch()
+    this.#domController?.abort()
+    this.#domController = null
 
     this.#toolbar?.destroy()
     this.#toolbar = null
@@ -488,11 +779,71 @@ export class Expose {
     this.#slideContainer = null
     this.#navPrev = null
     this.#navNext = null
+    const previousFocus = this.#previousFocus
+    this.#previousFocus = null
+    if (Expose.#openInstances.at(-1) === this && previousFocus?.isConnected) {
+      previousFocus.focus({ preventScroll: true })
+    }
+  }
+
+  #syncNavigation() {
+    if (!this.#overlay) return
+    if (this.#slides.length <= 1) {
+      this.#navPrev?.remove()
+      this.#navNext?.remove()
+      this.#navPrev = null
+      this.#navNext = null
+      return
+    }
+    if (!this.#navPrev) {
+      this.#navPrev = this.#createNavButton('prev', '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6l6 6"/></svg>', () => this.prev())
+      this.#overlay.appendChild(this.#navPrev)
+    }
+    if (!this.#navNext) {
+      this.#navNext = this.#createNavButton('next', '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6l-6 6"/></svg>', () => this.next())
+      this.#overlay.appendChild(this.#navNext)
+    }
+  }
+
+  /** @param {KeyboardEvent} event */
+  #trapFocus(event) {
+    if (!this.#overlay) return
+    const focusable = [...this.#overlay.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((element) => element instanceof HTMLElement && element.offsetParent !== null)
+    if (focusable.length === 0) {
+      event.preventDefault()
+      this.#overlay.focus({ preventScroll: true })
+      return
+    }
+    const first = focusable[0]
+    const last = focusable.at(-1)
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === this.#overlay)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
+  #releaseOpenResources() {
+    this.#teardownDOM()
+    const index = Expose.#openInstances.lastIndexOf(this)
+    if (index !== -1) Expose.#openInstances.splice(index, 1)
+    if (this.#bodyScrollLocked) {
+      unlockBodyScroll()
+      this.#bodyScrollLocked = false
+    }
   }
 
   #clearSlideElements() {
     for (const [, entry] of this.#slideElements) {
-      entry.cleanup?.()
+      try {
+        entry.cleanup?.()
+      } catch (error) {
+        console.error('Expose: slide cleanup failed', error)
+      }
       entry.el.remove()
     }
     this.#slideElements.clear()
@@ -536,7 +887,7 @@ export class Expose {
   }
 
   #preloadNeighbors() {
-    const preload = this.#options.preload || 1
+    const preload = Math.min(this.#options.preload ?? 1, Math.max(0, this.#slides.length - 1))
     for (let offset = 1; offset <= preload; offset++) {
       const next = this.#resolveIndex(this.#currentIndex + offset)
       const prev = this.#resolveIndex(this.#currentIndex - offset)
@@ -551,6 +902,7 @@ export class Expose {
    */
   async #goToAnimated(index, direction) {
     const prevIndex = this.#currentIndex
+    const lifecycleVersion = this.#lifecycleVersion
 
     this.#renderSlide(index)
 
@@ -569,12 +921,23 @@ export class Expose {
 
     this.#isAnimating = true
     this.#currentIndex = index
+    const animationController = new AbortController()
+    this.#animationController = animationController
 
-    await this.#animationManager.transition(
-      currentEntry.el, nextEntry.el, direction, this.#options.animation,
-    )
+    try {
+      await this.#animationManager.transition(
+        currentEntry.el, nextEntry.el, direction, this.#options.animation, animationController.signal,
+      )
+    } catch (error) {
+      currentEntry.el.style.display = 'none'
+      nextEntry.el.style.display = ''
+      console.error('Expose: slide animation failed', error)
+    } finally {
+      if (this.#animationController === animationController) this.#animationController = null
+      if (this.#lifecycleVersion === lifecycleVersion) this.#isAnimating = false
+    }
 
-    this.#isAnimating = false
+    if (this.#destroyed || !this.#isOpen || this.#lifecycleVersion !== lifecycleVersion) return
     this.#preloadNeighbors()
     this.#updateToolbar()
 
@@ -584,6 +947,7 @@ export class Expose {
   #updateToolbar() {
     if (!this.#toolbar) return
     const slide = this.#slides[this.#currentIndex]
+    if (!slide) return
     this.#toolbar.updateCounter(this.#currentIndex, this.#slides.length)
     this.#toolbar.updateVisibility(slide)
 
@@ -604,11 +968,12 @@ export class Expose {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = `expose__nav expose__nav--${dir}`
+    btn.setAttribute('aria-label', dir === 'prev' ? 'Previous slide' : 'Next slide')
     btn.innerHTML = html
     btn.addEventListener('click', (e) => {
       e.stopPropagation()
       onClick()
-    })
+    }, { signal: this.#domController?.signal })
     return btn
   }
 
@@ -649,6 +1014,11 @@ export class Expose {
   #onTouchEnd = (e) => {
     if (!this.#touchStart || !this.#swiping) { this.#touchStart = null; return }
     const t = e.changedTouches[0]
+    if (!t) {
+      this.#touchStart = null
+      this.#swiping = false
+      return
+    }
     const dx = t.clientX - this.#touchStart.x
     const elapsed = Date.now() - this.#touchStart.time
     this.#touchStart = null
@@ -660,9 +1030,11 @@ export class Expose {
 
   #bindTouch() {
     if (!this.#slideContainer) return
-    this.#slideContainer.addEventListener('touchstart', this.#onTouchStart, { passive: true })
-    this.#slideContainer.addEventListener('touchmove', this.#onTouchMove, { passive: false })
-    this.#slideContainer.addEventListener('touchend', this.#onTouchEnd, { passive: true })
+    const signal = this.#domController?.signal
+    this.#slideContainer.addEventListener('touchstart', this.#onTouchStart, { passive: true, signal })
+    this.#slideContainer.addEventListener('touchmove', this.#onTouchMove, { passive: false, signal })
+    this.#slideContainer.addEventListener('touchend', this.#onTouchEnd, { passive: true, signal })
+    this.#slideContainer.addEventListener('touchcancel', this.#onTouchEnd, { passive: true, signal })
   }
 
   #unbindTouch() {
@@ -670,6 +1042,7 @@ export class Expose {
     this.#slideContainer.removeEventListener('touchstart', this.#onTouchStart)
     this.#slideContainer.removeEventListener('touchmove', this.#onTouchMove)
     this.#slideContainer.removeEventListener('touchend', this.#onTouchEnd)
+    this.#slideContainer.removeEventListener('touchcancel', this.#onTouchEnd)
     this.#touchStart = null
     this.#swiping = false
   }
