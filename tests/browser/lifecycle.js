@@ -120,6 +120,15 @@ async function run() {
   assert(!dynamic.isOpen(), 'empty slide replacement did not close the gallery')
   dynamic.destroy()
 
+  const noArrowNavigation = new Expose(slides, { animation: 'none', navigation: false })
+  await noArrowNavigation.open()
+  assert(!document.querySelector('.expose__nav'), 'navigation:false rendered arrow controls')
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert(noArrowNavigation.getIndex() === 1, 'navigation:false disabled keyboard navigation')
+  await noArrowNavigation.close()
+  noArrowNavigation.destroy()
+
   Expose.registerAnimation('hanging-test', {
     enter(_overlay, _duration, signal) {
       return new Promise(resolve => signal?.addEventListener('abort', resolve, { once: true }))

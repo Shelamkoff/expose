@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Expose } from '../src/Expose.js'
+import { createAutoplay } from '../src/plugins/autoplay.js'
 import { createDownload } from '../src/plugins/download.js'
 
 test('a failed plugin installation is atomic', () => {
@@ -85,4 +86,25 @@ test('download request is aborted when the gallery closes', async () => {
     plugin.destroy()
     globalThis.fetch = previousFetch
   }
+})
+
+test('autoplay keeps its toolbar toggle inactive when there is only one slide', () => {
+  let toggleState = null
+  const plugin = createAutoplay()
+  plugin.install({
+    getSlideCount: () => 1,
+    isOpen: () => true,
+    emit() {},
+    on: () => () => {},
+    toolbar: {
+      add() {},
+      remove() {},
+      setToggleState(_name, active) { toggleState = active },
+    },
+  })
+
+  assert.equal(plugin.start(), false)
+  assert.equal(plugin.isActive(), false)
+  assert.equal(toggleState, false)
+  plugin.destroy()
 })

@@ -4,7 +4,7 @@ import { AnimationManager } from '../AnimationManager.js'
 AnimationManager.register('fold', {
   enter: fadeEnter,
   exit: fadeExit,
-  transition(current, next, direction, duration) {
+  transition(current, next, direction, duration, signal) {
     const parent = current.parentElement
     if (parent) parent.style.perspective = '1200px'
 
@@ -20,6 +20,8 @@ AnimationManager.register('fold', {
       () => { current.style.transform = 'rotateX(0)' },
       () => { current.style.opacity = '0'; current.style.transform = 'rotateX(-90deg)' },
       half,
+      'transform,opacity',
+      signal,
     ).then(() => {
       current.style.display = 'none'
       current.style.transform = ''
@@ -30,6 +32,8 @@ AnimationManager.register('fold', {
         () => {},
         () => { next.style.opacity = '1'; next.style.transform = 'rotateX(0)' },
         half,
+        'transform,opacity',
+        signal,
       )
     }).then(() => {
       next.style.transform = ''

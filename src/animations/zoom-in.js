@@ -2,21 +2,25 @@ import { cssTransition } from './_helpers.js'
 import { AnimationManager } from '../AnimationManager.js'
 
 AnimationManager.register('zoom-in', {
-  enter(overlay, duration) {
+  enter(overlay, duration, signal) {
     return cssTransition(overlay,
       () => { overlay.style.opacity = '0'; overlay.style.transform = 'scale3d(0.8, 0.8, 1)' },
       () => { overlay.style.opacity = '1'; overlay.style.transform = 'scale3d(1, 1, 1)' },
       duration,
+      'transform,opacity',
+      signal,
     )
   },
-  exit(overlay, duration) {
+  exit(overlay, duration, signal) {
     return cssTransition(overlay,
       () => { overlay.style.opacity = '1'; overlay.style.transform = 'scale3d(1, 1, 1)' },
       () => { overlay.style.opacity = '0'; overlay.style.transform = 'scale3d(0.8, 0.8, 1)' },
       duration,
+      'transform,opacity',
+      signal,
     )
   },
-  transition(current, next, direction, duration) {
+  transition(current, next, direction, duration, signal) {
     next.style.display = ''
     next.style.opacity = '0'
     next.style.transform = `scale3d(${direction === 1 ? '1.1, 1.1' : '0.9, 0.9'}, 1)`
@@ -26,11 +30,15 @@ AnimationManager.register('zoom-in', {
         () => { current.style.opacity = '1'; current.style.transform = 'scale3d(1, 1, 1)' },
         () => { current.style.opacity = '0'; current.style.transform = `scale3d(${direction === 1 ? '0.9, 0.9' : '1.1, 1.1'}, 1)` },
         duration,
+        'transform,opacity',
+        signal,
       ),
       cssTransition(next,
         () => {},
         () => { next.style.opacity = '1'; next.style.transform = 'scale3d(1, 1, 1)' },
         duration,
+        'transform,opacity',
+        signal,
       ),
     ]).then(() => {
       current.style.display = 'none'

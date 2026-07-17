@@ -1,18 +1,41 @@
-import { fadeEnter, fadeExit } from './_helpers.js'
+import { createAbortError, fadeEnter, fadeExit } from './_helpers.js'
 import { AnimationManager } from '../AnimationManager.js'
 
 AnimationManager.register('glitch', {
   enter: fadeEnter,
   exit: fadeExit,
-  transition(current, next, direction, duration) {
+  transition(current, next, direction, duration, signal) {
     const STEPS = 8
     const step = duration / STEPS
     next.style.display = ''
     next.style.opacity = '0'
 
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(createAbortError())
+        return
+      }
+
       let i = 0
       let start = null
+      let frame = 0
+
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort)
+        current.style.opacity = ''
+        current.style.transform = ''
+        next.style.opacity = ''
+        next.style.transform = ''
+      }
+      const onAbort = () => {
+        cancelAnimationFrame(frame)
+        cleanup()
+        current.style.display = ''
+        next.style.display = 'none'
+        reject(createAbortError())
+      }
+
+      signal?.addEventListener('abort', onAbort, { once: true })
 
       function tick(ts) {
         if (!start) start = ts
@@ -39,17 +62,14 @@ AnimationManager.register('glitch', {
 
         if (i >= STEPS) {
           current.style.display = 'none'
-          current.style.opacity = ''
-          current.style.transform = ''
-          next.style.opacity = ''
-          next.style.transform = ''
+          cleanup()
           resolve()
         } else {
-          requestAnimationFrame(tick)
+          frame = requestAnimationFrame(tick)
         }
       }
 
-      requestAnimationFrame(tick)
+      frame = requestAnimationFrame(tick)
     })
   },
 })

@@ -49,19 +49,31 @@ export function createAutoplay(options = {}) {
     bar.classList.add('expose__autoplay-bar--active')
   }
 
+  function syncInactiveUi() {
+    ctx?.toolbar.setToggleState('autoplay', false)
+    hideBar()
+  }
+
   function start() {
-    if (active || !ctx?.isOpen()) return
-    if (ctx.getSlideCount() <= 1) return
+    if (active) return true
+    if (!ctx?.isOpen() || ctx.getSlideCount() <= 1) {
+      syncInactiveUi()
+      return false
+    }
     active = true
     const c = ctx
     schedule(c)
     c.toolbar.setToggleState('autoplay', true)
     showBar()
     c.emit('autoplay:start')
+    return true
   }
 
   function stop() {
-    if (!active) return
+    if (!active) {
+      syncInactiveUi()
+      return false
+    }
     active = false
     if (timer) {
       clearTimeout(timer)
@@ -70,6 +82,7 @@ export function createAutoplay(options = {}) {
     ctx?.toolbar.setToggleState('autoplay', false)
     hideBar()
     ctx?.emit('autoplay:stop')
+    return true
   }
 
   function toggle() {

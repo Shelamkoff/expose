@@ -9,6 +9,7 @@ const ownedPluginInstances = new WeakSet()
 /** @type {import('./types').ExposeOptions} */
 const DEFAULTS = {
   loop: true,
+  navigation: true,
   closeOnBackdrop: true,
   animation: 'fade',
   animationDuration: 300,
@@ -28,8 +29,10 @@ function validateOptions(options) {
   if (!Number.isInteger(options.startIndex) || options.startIndex < 0) {
     throw new RangeError('Expose: startIndex must be a non-negative integer')
   }
-  if (typeof options.loop !== 'boolean' || typeof options.closeOnBackdrop !== 'boolean') {
-    throw new TypeError('Expose: loop and closeOnBackdrop must be booleans')
+  if (typeof options.loop !== 'boolean'
+    || typeof options.navigation !== 'boolean'
+    || typeof options.closeOnBackdrop !== 'boolean') {
+    throw new TypeError('Expose: loop, navigation, and closeOnBackdrop must be booleans')
   }
   if (typeof options.animation !== 'string' || options.animation.trim() === '') {
     throw new TypeError('Expose: animation must be a non-empty string')
@@ -788,7 +791,7 @@ export class Expose {
 
   #syncNavigation() {
     if (!this.#overlay) return
-    if (this.#slides.length <= 1) {
+    if (!this.#options.navigation || this.#slides.length <= 1) {
       this.#navPrev?.remove()
       this.#navNext?.remove()
       this.#navPrev = null

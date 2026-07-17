@@ -51,6 +51,7 @@ export class AnimationManager {
    * Run enter animation (opening the gallery).
    * @param {HTMLElement} overlay
    * @param {string} animationName
+   * @param {AbortSignal} [signal]
    * @returns {Promise<void>}
    */
   async enter(overlay, animationName, signal) {
@@ -66,6 +67,7 @@ export class AnimationManager {
    * Run exit animation (closing the gallery).
    * @param {HTMLElement} overlay
    * @param {string} animationName
+   * @param {AbortSignal} [signal]
    * @returns {Promise<void>}
    */
   async exit(overlay, animationName, signal) {
@@ -83,6 +85,7 @@ export class AnimationManager {
    * @param {HTMLElement} next
    * @param {1 | -1} direction
    * @param {string} animationName
+   * @param {AbortSignal} [signal]
    * @returns {Promise<void>}
    */
   async transition(current, next, direction, animationName, signal) {

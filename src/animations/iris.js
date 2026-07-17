@@ -4,7 +4,7 @@ import { AnimationManager } from '../AnimationManager.js'
 AnimationManager.register('iris', {
   enter: fadeEnter,
   exit: fadeExit,
-  transition(current, next, direction, duration) {
+  transition(current, next, direction, duration, signal) {
     next.style.display = ''
     next.style.opacity = '1'
     next.style.zIndex = '2'
@@ -15,6 +15,7 @@ AnimationManager.register('iris', {
       () => { next.style.clipPath = 'circle(75% at 50% 50%)' },
       duration,
       'clip-path',
+      signal,
     ).then(() => {
       current.style.display = 'none'
       next.style.clipPath = ''

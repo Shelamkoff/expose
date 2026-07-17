@@ -124,6 +124,8 @@ export interface ExposePlugin {
 
 export interface ExposeOptions {
   loop?: boolean
+  /** Show the previous and next arrow buttons. Keyboard and swipe navigation remain available. */
+  navigation?: boolean
   closeOnBackdrop?: boolean
   animation?: string
   animationDuration?: number

@@ -4,7 +4,7 @@ import { AnimationManager } from '../AnimationManager.js'
 AnimationManager.register('swirl', {
   enter: fadeEnter,
   exit: fadeExit,
-  transition(current, next, direction, duration) {
+  transition(current, next, direction, duration, signal) {
     next.style.display = ''
     next.style.opacity = '0'
     next.style.transform = `scale(0) rotate(${-direction * 180}deg)`
@@ -14,11 +14,15 @@ AnimationManager.register('swirl', {
         () => { current.style.transform = 'scale(1) rotate(0)' },
         () => { current.style.opacity = '0'; current.style.transform = `scale(0) rotate(${direction * 180}deg)` },
         duration,
+        'transform,opacity',
+        signal,
       ),
       cssTransition(next,
         () => {},
         () => { next.style.opacity = '1'; next.style.transform = 'scale(1) rotate(0)' },
         duration,
+        'transform,opacity',
+        signal,
       ),
     ]).then(() => {
       current.style.display = 'none'

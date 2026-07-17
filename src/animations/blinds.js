@@ -1,14 +1,14 @@
-import { scatterTiles, fadeEnter, fadeExit, fadeFallback } from './_helpers.js'
+import { animationDelay, animationFrame, scatterTiles, fadeEnter, fadeExit, fadeFallback } from './_helpers.js'
 import { AnimationManager } from '../AnimationManager.js'
 
 AnimationManager.register('blinds', {
   enter: fadeEnter,
   exit: fadeExit,
-  transition(current, next, direction, duration) {
+  async transition(current, next, direction, duration, signal) {
     const STRIPS = 8
     const img = current.querySelector('img')
 
-    if (!img) return fadeFallback(current, next, duration)
+    if (!img) return fadeFallback(current, next, duration, signal)
 
     next.style.display = ''
     next.style.opacity = '1'
@@ -17,8 +17,8 @@ AnimationManager.register('blinds', {
     current.style.opacity = '0'
     grid.style.perspective = '800px'
 
-    return new Promise(resolve => {
-      requestAnimationFrame(() => {
+    try {
+      await animationFrame(() => {
         tiles.forEach(({ el, col }) => {
           const idx = direction === 1 ? col : STRIPS - 1 - col
           const delay = idx * (duration / STRIPS) * 0.5
@@ -29,14 +29,12 @@ AnimationManager.register('blinds', {
           el.style.transform = `rotateY(${direction * 90}deg)`
           el.style.opacity = '0'
         })
-      })
-
-      setTimeout(() => {
-        grid.remove()
-        current.style.display = 'none'
-        current.style.opacity = ''
-        resolve()
-      }, duration)
-    })
+      }, signal)
+      await animationDelay(duration, signal)
+      current.style.display = 'none'
+    } finally {
+      grid.remove()
+      current.style.opacity = ''
+    }
   },
 })

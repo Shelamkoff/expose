@@ -2,21 +2,25 @@ import { cssTransition } from './_helpers.js'
 import { AnimationManager } from '../AnimationManager.js'
 
 AnimationManager.register('cube', {
-  enter(overlay, duration) {
+  enter(overlay, duration, signal) {
     return cssTransition(overlay,
       () => { overlay.style.opacity = '0'; overlay.style.transform = 'scale(.9)' },
       () => { overlay.style.opacity = '1'; overlay.style.transform = '' },
       duration,
+      'transform,opacity',
+      signal,
     )
   },
-  exit(overlay, duration) {
+  exit(overlay, duration, signal) {
     return cssTransition(overlay,
       () => { overlay.style.opacity = '1' },
       () => { overlay.style.opacity = '0'; overlay.style.transform = 'scale(.9)' },
       duration,
+      'transform,opacity',
+      signal,
     ).then(() => { overlay.style.transform = '' })
   },
-  transition(current, next, direction, duration) {
+  transition(current, next, direction, duration, signal) {
     const parent = current.parentElement
     if (parent) parent.style.perspective = '1200px'
 
@@ -33,11 +37,15 @@ AnimationManager.register('cube', {
         () => { current.style.transform = 'rotateY(0)' },
         () => { current.style.transform = `rotateY(${angle}deg)` },
         duration,
+        'transform,opacity',
+        signal,
       ),
       cssTransition(next,
         () => {},
         () => { next.style.transform = 'rotateY(0)' },
         duration,
+        'transform,opacity',
+        signal,
       ),
     ]).then(() => {
       current.style.display = 'none'

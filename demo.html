@@ -110,7 +110,7 @@
     }
   </style>
 </head>
-<body>
+<body data-status="running">
 
   <h1>ExposeJS Demo</h1>
 
@@ -173,6 +173,9 @@
 
   <div class="grid" id="grid"></div>
 
+  <script type="importmap">
+    { "imports": { "@shelamkoff/event-bus": "../event-bus/index.js" } }
+  </script>
   <script type="module">
     import {
       Expose,
@@ -376,6 +379,7 @@
         log('Gallery destroyed')
       }
     })
+    document.body.dataset.status = 'pass'
   </script>
 </body>
 </html>
