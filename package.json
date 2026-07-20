@@ -1,7 +1,7 @@
 {
   "name": "@shelamkoff/expose",
   "version": "1.0.0",
-  "description": "Framework-agnostic fullscreen gallery with animations and composable plugins",
+  "description": "Framework-agnostic fullscreen lightbox and media gallery with animations, zoom, thumbnails, video, iframes, and composable plugins",
   "type": "module",
   "sideEffects": ["**/*.css", "**/animations/*.js"],
   "exports": {
@@ -15,13 +15,28 @@
   "files": ["dist", "README.md", "README.ru.md", "LICENSE"],
   "scripts": {
     "build": "node scripts/build-package.mjs",
-    "demo": "node ../scripts/dev-server.mjs /expose/demo.html",
+    "demo": "node scripts/dev-server.mjs /demo.html",
     "test": "node --test",
     "prepublishOnly": "npm test",
     "prepack": "npm run build"
   },
   "dependencies": { "@shelamkoff/event-bus": "^1.0.0" },
-  "keywords": ["gallery", "lightbox", "fullscreen", "plugins", "framework-agnostic", "esm"],
+  "keywords": [
+    "javascript",
+    "gallery",
+    "lightbox",
+    "image-gallery",
+    "media-viewer",
+    "fullscreen",
+    "animations",
+    "video-gallery",
+    "plugins",
+    "zoom",
+    "thumbnails",
+    "vanilla-js",
+    "framework-agnostic",
+    "esm"
+  ],
   "author": "Shelamkoff",
   "engines": { "node": ">=20" },
   "license": "MIT",
@@ -29,7 +44,7 @@
     "type": "git",
     "url": "git+https://github.com/Shelamkoff/expose.git"
   },
-  "homepage": "https://github.com/Shelamkoff/expose#readme",
+  "homepage": "https://shelamkoff.github.io/expose/",
   "bugs": { "url": "https://github.com/Shelamkoff/expose/issues" },
   "publishConfig": {
     "access": "public",

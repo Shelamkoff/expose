@@ -1,8 +1,19 @@
 # @shelamkoff/expose
 
-Framework-agnostic fullscreen gallery for images, video, iframes, and application-rendered content. It provides asynchronous navigation, named animations, an owned toolbar, typed events, focus and scroll management, and composable plugins. Version `1.0.0` is an ESM package for modern browsers.
+[![npm version](https://img.shields.io/npm/v/%40shelamkoff%2Fexpose)](https://www.npmjs.com/package/@shelamkoff/expose)
+[![Live demo](https://img.shields.io/badge/demo-live-4357b4)](https://shelamkoff.github.io/expose/)
+[![MIT license](https://img.shields.io/badge/license-MIT-2ea44f)](./LICENSE)
 
-[Русская версия](./README.ru.md)
+Framework-agnostic fullscreen lightbox and media gallery for images, video, iframes, and application-rendered content. It provides asynchronous navigation, named animations, an owned toolbar, typed events, focus and scroll management, and composable plugins as an ESM package for modern browsers.
+
+[Live demo](https://shelamkoff.github.io/expose/) · [npm](https://www.npmjs.com/package/@shelamkoff/expose) · [Русская версия](./README.ru.md)
+
+## Highlights
+
+- Image, video, iframe, and application-rendered slides.
+- Named transitions plus zoom, thumbnails, captions, autoplay, transform, download, and fullscreen plugins.
+- Keyboard, swipe, focus restoration, and reference-counted scroll locking.
+- Framework-independent JavaScript API with TypeScript declarations.
 
 ## Installation
 
@@ -246,13 +257,13 @@ Stop animation-owned timers and frames when the signal aborts. A failing custom 
 
 ## Built-in plugins
 
-- [Captions](dist/src/plugins/captions/README.md) — slide captions.
-- [Zoom](dist/src/plugins/zoom/README.md) — image zoom and pan.
-- [Thumbnails](dist/src/plugins/thumbnails/README.md) — thumbnail navigation.
-- [Autoplay](dist/src/plugins/autoplay/README.md) — interval playback.
-- [Transform](dist/src/plugins/transform/README.md) — rotation and horizontal/vertical flip.
-- [Download](dist/src/plugins/download/README.md) — slide download/open action.
-- [Fullscreen](dist/src/plugins/fullscreen/README.md) — Fullscreen API integration.
+- [Captions](src/plugins/captions/README.md) — slide captions.
+- [Zoom](src/plugins/zoom/README.md) — image zoom and pan.
+- [Thumbnails](src/plugins/thumbnails/README.md) — thumbnail navigation.
+- [Autoplay](src/plugins/autoplay/README.md) — interval playback.
+- [Transform](src/plugins/transform/README.md) — rotation and horizontal/vertical flip.
+- [Download](src/plugins/download/README.md) — slide download/open action.
+- [Fullscreen](src/plugins/fullscreen/README.md) — Fullscreen API integration.
 
 Plugins may only be installed while the gallery is closed. A stateful plugin instance may belong to one live gallery at a time.
 
@@ -301,20 +312,16 @@ Media URLs are validated before DOM assignment. Active schemes are rejected. Ifr
 
 ## Demo
 
-From this package directory:
+[Open the live demo](https://shelamkoff.github.io/expose/) to try mixed slide types, animations, toolbar actions, and built-in plugins.
+
+To run the same demo locally:
 
 ```bash
 npm install
 npm run demo
 ```
 
-Or from the workspace root:
-
-```bash
-npm run demo:expose
-```
-
-Open `http://127.0.0.1:4173/expose/demo.html`. The page demonstrates mixed slide types, animations, toolbar items, and built-in plugins.
+Open `http://127.0.0.1:4173/demo.html`.
 
 ## Package exports
 
