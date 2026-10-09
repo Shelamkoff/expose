@@ -84,7 +84,7 @@ class Element {
   set textContent(value) { this._text = value }
 
   #matches(selector) {
-    const match = /^(\\w+)?(?:\\.([\\w-]+))?(?:\\[data-([\\w-]+)\\])?$/.exec(selector)
+    const match = /^(\w+)?(?:\.([\w-]+))?(?:\[data-([\w-]+)\])?$/.exec(selector)
     if (!match) return false
     if (match[1] && this.tagName !== match[1].toUpperCase()) return false
     if (match[2] && !this.classList.contains(match[2])) return false
