@@ -627,3 +627,29 @@ test('slide:change reentrancy replaces once and suppresses stale collection even
     assert.equal(gallery.getSlide()?.src, '/inner.jpg')
   } finally { gallery.destroy() }
 }))
+
+test('reentrant removal of the same slide from renderer cleanup is not applied twice', async () => withDOM(async ({ document }) => {
+  let gallery
+  let destroyed = 0
+  gallery = new Expose([
+    {
+      src: () => ({
+        element: document.createElement('article'),
+        destroy() {
+          destroyed += 1
+          if (destroyed === 1) gallery.removeSlide(0)
+        },
+      }),
+    },
+    { src: '/second.jpg' },
+    { src: '/third.jpg' },
+  ], { preload: 0, animation: 'none', loop: false })
+  try {
+    await gallery.open()
+    gallery.removeSlide(0)
+    assert.equal(destroyed, 1)
+    assert.deepEqual(gallery.getSlides().map(slide => slide.src), ['/second.jpg', '/third.jpg'])
+    assert.equal(gallery.getSlide()?.src, '/second.jpg')
+    assert.equal(document.querySelectorAll('.expose__slide').length, 1)
+  } finally { gallery.destroy() }
+}))

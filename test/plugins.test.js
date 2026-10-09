@@ -263,3 +263,20 @@ test('destroy revokes the plugin context and cannot restart subscriptions', () =
   assert.throws(() => captured.toolbar.add({ name: 'resurrected', icon: 'x', onClick() {} }), /inactive|destroyed/i)
   assert.throws(() => captured.gestures.setSwipeBlocked(true), /inactive|destroyed/i)
 })
+
+test('plugin installation that destroys the owner is rolled back atomically', () => {
+  const gallery = new Expose([])
+  let cleanupCalls = 0
+  const plugin = {
+    name: 'destroy-during-install',
+    install() { gallery.destroy() },
+    destroy() { cleanupCalls++ },
+  }
+  assert.throws(() => gallery.use(plugin), /destroy|install|inactive/i)
+  assert.equal(cleanupCalls, 1, 'failed installation must release plugin resources')
+  assert.equal(gallery.getPlugin(plugin.name), undefined)
+  const replacement = new Expose([])
+  try {
+    assert.doesNotThrow(() => replacement.use(plugin), 'failed installation leaked global plugin ownership')
+  } finally { replacement.destroy() }
+})
