@@ -116,19 +116,26 @@ export class Toolbar {
     this.#buttonControllers.set(config.name, controller)
     btn.addEventListener('click', (e) => {
       e.stopPropagation()
-
-      if (config.toggle) {
-        const active = !this.#toggleStates.get(config.name)
-        this.#toggleStates.set(config.name, active)
-        btn.classList.toggle('expose__toolbar-btn--active', active)
-
-        if (config.onStateChange) {
-          const newIcon = config.onStateChange(active)
-          if (newIcon) btn.innerHTML = newIcon
-        }
+      const reportError = error => {
+        console.error(`Expose: toolbar action "${config.name}" failed`, error)
       }
-
-      config.onClick()
+      try {
+        if (config.toggle) {
+          const active = !this.#toggleStates.get(config.name)
+          this.#toggleStates.set(config.name, active)
+          btn.classList.toggle('expose__toolbar-btn--active', active)
+          if (config.onStateChange) {
+            const newIcon = config.onStateChange(active)
+            if (newIcon) btn.innerHTML = newIcon
+          }
+        }
+        const result = config.onClick()
+        if (result && typeof result.then === 'function') {
+          Promise.resolve(result).catch(reportError)
+        }
+      } catch (error) {
+        reportError(error)
+      }
     }, { signal: controller.signal })
 
     this.#buttons.set(config.name, btn)
