@@ -555,3 +555,40 @@ test('eviction cleanup may replace the gallery without removing the replacement'
     assert.equal(slideChanges, 1, 'obsolete transition emitted a second slide change')
   } finally { gallery.destroy() }
 }))
+
+test('reentrant setSlides from renderer cleanup does not dispatch obsolete events', async () => withDOM(async ({ document }) => {
+  let gallery
+  let cleanups = 0
+  const changedSlides = []
+  const replacedCollections = []
+  gallery = new Expose([{
+    src: () => ({
+      element: document.createElement('article'),
+      destroy() {
+        if (++cleanups === 1) gallery.setSlides([{ src: '/inner.jpg' }])
+      },
+    }),
+  }], { preload: 0, animation: 'none' })
+  gallery.on('slide:change', ({ slide }) => changedSlides.push(slide.src))
+  gallery.on('slides:change', ({ slides }) => replacedCollections.push(slides[0]?.src))
+  try {
+    await gallery.open()
+    gallery.setSlides([{ src: '/outer.jpg' }])
+    assert.equal(gallery.getSlide()?.src, '/inner.jpg')
+    assert.equal(document.querySelectorAll('.expose__slide').length, 1)
+    assert.deepEqual(changedSlides, ['/inner.jpg'], 'obsolete replacement emitted slide change')
+    assert.deepEqual(replacedCollections, ['/inner.jpg'], 'obsolete replacement emitted slides change')
+  } finally { gallery.destroy() }
+}))
+
+test('an explicit empty iframe sandbox is enforced instead of omitted', async () => withDOM(async ({ document }) => {
+  const gallery = new Expose([
+    { src: { type: 'iframe', url: 'https://example.test/embed', sandbox: '' } },
+  ], { preload: 0, animation: 'none' })
+  try {
+    await gallery.open()
+    const frame = document.querySelector('iframe')
+    assert.equal(frame.attributes.get('sandbox'), '',
+      'empty sandbox is a security boundary; omitting it grants the iframe more permissions')
+  } finally { gallery.destroy() }
+}))

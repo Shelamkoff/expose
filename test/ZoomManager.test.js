@@ -79,3 +79,25 @@ test('pinching acquires and releases a swipe-navigation claim', () => {
   manager.destroy()
   assert.equal(claims.at(-1), false)
 })
+
+test('a zoomMin above one still permits panning and owns horizontal gestures', () => {
+  const container = new FakeContainer()
+  const claims = []
+  const manager = new ZoomManager({
+    emit() {},
+    setSwipeBlocked(blocked) { claims.push(blocked) },
+  }, { zoomMin: 2, zoomMax: 4 })
+  try {
+    manager.attach(container)
+    assert.equal(claims.at(-1), true, 'a magnified image should own swipe gestures')
+    container.dispatch('pointerdown', { clientX: 50 })
+    container.dispatch('pointermove', { clientX: 75 })
+    assert.match(container.image.style.transform, /translate3d\(25px, 0px, 0\)/,
+      'base 2x image must support panning within cropped image bounds')
+    container.dispatch('pointerup', { clientX: 75 })
+    assert.equal(claims.at(-1), true, 'zoomed image must keep its swipe claim after pan')
+  } finally {
+    manager.destroy()
+    assert.equal(claims.at(-1), false)
+  }
+})
