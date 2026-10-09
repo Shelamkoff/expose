@@ -468,3 +468,63 @@ test('a rejected asynchronous custom renderer is safely observed', async () => w
     console.error = prior
   }
 }))
+
+test('evicting a custom slide that destroys its gallery releases resources exactly once', async () => withDOM(async ({ document }) => {
+  let gallery
+  let cleanupCount = 0
+  gallery = new Expose([
+    { src: () => ({
+      element: document.createElement('article'),
+      destroy() { cleanupCount++; gallery.destroy() },
+    }) },
+    { src: '/next.jpg' },
+  ], { animation: 'none', preload: 0 })
+  try {
+    await gallery.open()
+    await gallery.next()
+    assert.equal(cleanupCount, 1, 'eviction and nested gallery destroy cleaned the same slide twice')
+    assert.equal(gallery.isOpen(), false)
+    assert.equal(document.querySelector('.expose'), null)
+  } finally { gallery.destroy() }
+}))
+
+test('closing a gallery with renderer-owned destroy reentrancy disposes once', async () => withDOM(async ({ document }) => {
+  let gallery
+  let cleanupCount = 0
+  gallery = new Expose([
+    { src: () => ({
+      element: document.createElement('article'),
+      destroy() { cleanupCount++; gallery.destroy() },
+    }) },
+  ], { animation: 'none', preload: 0 })
+  try {
+    await gallery.open()
+    await gallery.close()
+    assert.equal(cleanupCount, 1, 'reentrant teardown cleaned the same slide twice')
+    assert.equal(gallery.isOpen(), false)
+    assert.equal(document.querySelector('.expose'), null)
+  } finally { gallery.destroy() }
+}))
+
+test('renderer cleanup returning a rejected Promise is observed without unhandled rejection', async () => withDOM(async ({ document }) => {
+  const errors = []
+  const original = console.error
+  const gallery = new Expose([
+    { src: () => ({
+      element: document.createElement('article'),
+      destroy: () => Promise.reject(new Error('asynchronous renderer cleanup failed')),
+    }) },
+  ], { animation: 'none', preload: 0 })
+  console.error = (...args) => { errors.push(args) }
+  try {
+    await gallery.open()
+    await gallery.close()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(errors.length, 1)
+    assert.match(String(errors[0][0]), /slide cleanup failed/)
+    assert.match(String(errors[0][1]?.message), /asynchronous renderer cleanup failed/)
+  } finally {
+    console.error = original
+    gallery.destroy()
+  }
+}))
