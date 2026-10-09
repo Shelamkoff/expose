@@ -7,7 +7,7 @@ const port = Number(process.env.PORT ?? 4173)
 const entry = '/tests/browser/lifecycle.html'
 const url = `http://${host}:${port}${entry}`
 
-const server = spawn(process.execPath, ['scripts/dev-server.mjs', entry], {
+const server = spawn(process.execPath, ['scripts/dev-server.mjs'], {
   env: { ...process.env, HOST: host, PORT: String(port) },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -44,7 +44,7 @@ try {
   console.log('Browser lifecycle passed:', result)
 
   // Exercise the exact root document shipped to GitHub Pages, not merely the
-  // gallery unit-test fixture. Local demo module failures surface as missing cards.
+  // gallery unit-test fixture. The dev server's root must resolve index.html.
   const demo = await browser.newPage()
   const demoErrors = []
   demo.on('pageerror', error => demoErrors.push(error.message))
