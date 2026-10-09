@@ -30,6 +30,15 @@ try {
   }
   if (!ready) throw new Error(`Demo server failed to start: ${serverOutput}`)
 
+  // A directory without index.html must return 404, not return 200 then
+  // crash the server from an unhandled createReadStream error.
+  const directoryResponse = await fetch(`http://${host}:${port}/src/`)
+  if (directoryResponse.status !== 404) {
+    throw new Error(`Directory without index.html returned ${directoryResponse.status} instead of 404`)
+  }
+  const aliveResponse = await fetch(url)
+  if (!aliveResponse.ok) throw new Error('Demo server crashed after directory request')
+
   browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()
   const errors = []

@@ -252,6 +252,43 @@ async function run() {
   assert(!document.querySelector('.expose iframe'), 'active iframe URL reached the DOM')
   unsafe.destroy()
 
+  // Keyboard navigation must not intercept arrow keys or text typed in
+  // application-owned interactive content, including contenteditable.
+  const editorSlide = {
+    src: () => {
+      const host = document.createElement('div')
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.id = 'expose-test-input'
+      const area = document.createElement('textarea')
+      area.id = 'expose-test-textarea'
+      const editable = document.createElement('div')
+      editable.id = 'expose-test-contenteditable'
+      editable.contentEditable = 'true'
+      host.append(input, area, editable)
+      return host
+    },
+  }
+  const editorGallery = new Expose([editorSlide, slides[0]], { animation: 'none' })
+  let fullscreenToggles = 0
+  editorGallery.on('fullscreen:toggle', () => { fullscreenToggles++ })
+  await editorGallery.open()
+  for (const selector of ['#expose-test-input', '#expose-test-textarea', '#expose-test-contenteditable']) {
+    const editor = document.querySelector(selector)
+    editor.focus()
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }))
+    assert(editorGallery.getIndex() === 0, `gallery navigated while editing ${selector}`)
+    assert(fullscreenToggles === 0, `gallery intercepted text input in ${selector}`)
+  }
+  editorGallery.isOpen() && document.querySelector('.expose').focus()
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', ctrlKey: true, bubbles: true }))
+  assert(editorGallery.getIndex() === 0, 'modified arrow shortcut unexpectedly navigated')
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+  await Promise.resolve()
+  assert(editorGallery.getIndex() === 1, 'ordinary arrow shortcut no longer navigates')
+  editorGallery.destroy()
+
   assert(activeDocumentListeners() === baselineListeners, 'Expose leaked document listeners')
   assert(!document.querySelector('.expose'), 'Expose leaked an overlay')
   assert(!document.documentElement.classList.contains('expose-noscroll'), 'Expose leaked the body scroll lock')

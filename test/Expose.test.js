@@ -286,3 +286,54 @@ test('plugin swipe claim prevents navigation and is released on cleanup', async 
     assert.equal(gallery.getIndex(), 1)
   } finally { gallery.destroy() }
 }))
+
+test('changing slides in an open listener does not lock future navigation', async () => withDOM(async () => {
+  const gallery = new Expose(slides(2), { animation: 'none' })
+  let completes = 0
+  gallery.on('open', () => gallery.setSlides(slides(3)))
+  gallery.on('open:complete', () => { completes++ })
+  try {
+    await gallery.open()
+    assert.equal(completes, 1, 'opening should still complete after replacing slides')
+    await gallery.goTo(1)
+    assert.equal(gallery.getIndex(), 1, 'navigation is stuck in animating state')
+  } finally { gallery.destroy() }
+}))
+
+test('replacing slides during an in-flight enter does not suppress open:complete', async () => withDOM(async () => {
+  Expose.registerAnimation('await-interrupted-enter', {
+    enter(_overlay, _duration, signal) {
+      return new Promise(resolve => signal?.addEventListener('abort', resolve, { once: true }))
+    },
+    exit() {},
+    transition(from, to) { from.style.display = 'none'; to.style.display = '' },
+  })
+  const gallery = new Expose(slides(2), { animation: 'await-interrupted-enter' })
+  let completes = 0
+  gallery.on('open:complete', () => { completes++ })
+  try {
+    const opening = gallery.open()
+    gallery.setSlides(slides(3))
+    await opening
+    assert.equal(completes, 1, 'an open overlay needs a completion event')
+    await gallery.goTo(1)
+    assert.equal(gallery.getIndex(), 1)
+  } finally { gallery.destroy() }
+}))
+
+test('destroying inside an open listener never attempts to animate a removed overlay', async () => withDOM(async ({ document }) => {
+  const gallery = new Expose(slides(1), { animation: 'none' })
+  const errors = []
+  const original = console.error
+  console.error = (...args) => { errors.push(args) }
+  gallery.on('open', () => gallery.destroy())
+  try {
+    await gallery.open()
+    assert.equal(gallery.isOpen(), false)
+    assert.equal(document.querySelector('.expose'), null)
+    assert.deepEqual(errors, [])
+  } finally {
+    gallery.destroy()
+    console.error = original
+  }
+}))
