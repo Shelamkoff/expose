@@ -289,6 +289,37 @@ async function run() {
   assert(editorGallery.getIndex() === 1, 'ordinary arrow shortcut no longer navigates')
   editorGallery.destroy()
 
+  const fixedFocus = new Expose([{
+    src: () => {
+      const root = document.createElement('div')
+      const editor = document.createElement('div')
+      editor.contentEditable = 'true'
+      editor.id = 'focus-editor'
+      editor.textContent = 'Edit'
+      const fixed = document.createElement('button')
+      fixed.id = 'focus-fixed'
+      fixed.style.position = 'fixed'
+      fixed.style.left = '20px'
+      fixed.style.top = '20px'
+      fixed.textContent = 'Fixed action'
+      root.append(editor, fixed)
+      return root
+    },
+  }], { animation: 'none', navigation: false })
+  await fixedFocus.open()
+  const fixedButton = document.querySelector('#focus-fixed')
+  assert(fixedButton.offsetParent === null, 'fixed-position focus test did not cover a null offsetParent')
+  assert(fixedButton.getClientRects().length > 0, 'fixed-position focus test button was not visible')
+  fixedButton.focus()
+  const fromFixed = new KeyboardEvent('keydown', {
+    key: 'Tab', shiftKey: true, bubbles: true, cancelable: true,
+  })
+  fixedButton.dispatchEvent(fromFixed)
+  assert(fromFixed.defaultPrevented, 'focus trap failed to wrap a visible fixed-position button')
+  assert(document.activeElement === document.querySelector('.expose__toolbar-btn[aria-label="Close"]'),
+    'focus trap moved outside the dialog instead of wrapping to Close')
+  fixedFocus.destroy()
+
   assert(activeDocumentListeners() === baselineListeners, 'Expose leaked document listeners')
   assert(!document.querySelector('.expose'), 'Expose leaked an overlay')
   assert(!document.documentElement.classList.contains('expose-noscroll'), 'Expose leaked the body scroll lock')

@@ -909,8 +909,13 @@ export class Expose {
   #trapFocus(event) {
     if (!this.#overlay) return
     const focusable = [...this.#overlay.querySelectorAll(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    )].filter((element) => element instanceof HTMLElement && element.offsetParent !== null)
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])',
+    )].filter(element => {
+      if (!(element instanceof HTMLElement) || element.getClientRects().length === 0) return false
+      // offsetParent is null for *visible* position:fixed controls. Check
+      // actual visibility rather than relying on that DOM property.
+      return getComputedStyle(element).visibility !== 'hidden'
+    })
     if (focusable.length === 0) {
       event.preventDefault()
       this.#overlay.focus({ preventScroll: true })
