@@ -36,6 +36,12 @@ try {
   if (directoryResponse.status !== 404) {
     throw new Error(`Directory without index.html returned ${directoryResponse.status} instead of 404`)
   }
+  for (const hidden of ['/.nojekyll', '/.git/config', '/.gitignore']) {
+    const response = await fetch(`http://${host}:${port}${hidden}`)
+    if (response.status !== 404) {
+      throw new Error(`Demo server exposed hidden file ${hidden}: HTTP ${response.status}`)
+    }
+  }
   const aliveResponse = await fetch(url)
   if (!aliveResponse.ok) throw new Error('Demo server crashed after directory request')
 

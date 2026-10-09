@@ -48,6 +48,10 @@ async function resolveRequestPath(requestUrl) {
   }
 
   if (pathname === '/') pathname = entryPath
+  // Do not publish credentials or repository metadata when HOST is public.
+  if (pathname.split('/').some(segment => segment.startsWith('.') && segment !== '.' && segment !== '..')) {
+    return null
+  }
   const candidate = resolve(root, `.${pathname}`)
   const fromRoot = relative(root, candidate)
   if (fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) return null

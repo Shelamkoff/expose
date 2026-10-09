@@ -167,3 +167,32 @@ test('autoplay stops immediately when slides are reduced to one', () => {
     assert.equal(changes.filter(event => event === 'autoplay:stop').length, 1)
   } finally { plugin.destroy() }
 })
+
+test('autoplay stops and reports a rejected navigation', async () => {
+  const events = []
+  const failures = []
+  const previousError = console.error
+  const player = createAutoplay({ interval: 1 })
+  player.install({
+    options: { loop: true },
+    isOpen: () => true,
+    getSlideCount: () => 2,
+    getIndex: () => 0,
+    next: async () => { throw new Error('navigation failed') },
+    emit: name => events.push(name),
+    on() { return () => {} },
+    toolbar: { add() {}, remove() {}, setToggleState() {} },
+  })
+  console.error = (...args) => failures.push(args)
+  try {
+    assert.equal(player.start(), true)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(player.isActive(), false)
+    assert.equal(events.filter(name => name === 'autoplay:stop').length, 1)
+    assert.equal(failures.length, 1)
+    assert.match(failures[0][0], /autoplay navigation failed/)
+  } finally {
+    player.destroy()
+    console.error = previousError
+  }
+})

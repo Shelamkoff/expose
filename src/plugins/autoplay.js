@@ -106,7 +106,13 @@ export function createAutoplay(options = {}) {
         stop()
         return
       }
-      await context.next()
+      try {
+        await context.next()
+      } catch (error) {
+        stop()
+        console.error('Expose: autoplay navigation failed', error)
+        return
+      }
       if (active && !timer) schedule(context)
     }, interval)
   }

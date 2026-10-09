@@ -321,7 +321,7 @@ Media URLs are validated before DOM assignment. Active schemes are rejected. Ifr
 
 [Open the live demo](https://shelamkoff.github.io/expose/) to try mixed slide types, animations, toolbar actions, and built-in plugins.
 
-To run the same demo locally:
+The demo server refuses access to hidden configuration and Git metadata. To run the same demo locally:
 
 ```bash
 npm install
