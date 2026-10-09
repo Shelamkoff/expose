@@ -42,6 +42,46 @@ try {
     throw new Error(`Browser lifecycle failed: ${result}\n${errors.join('\n')}`)
   }
   console.log('Browser lifecycle passed:', result)
+
+  // Exercise the exact root document shipped to GitHub Pages, not merely the
+  // gallery unit-test fixture. CDN module failures surface as missing cards.
+  const demo = await browser.newPage()
+  const demoErrors = []
+  demo.on('pageerror', error => demoErrors.push(error.message))
+  await demo.goto(`http://${host}:${port}/`, { waitUntil: 'domcontentloaded' })
+  await demo.waitForFunction(() => document.body.dataset.status !== 'running', null, { timeout: 20_000 })
+  const demoStatus = await demo.locator('body').getAttribute('data-status')
+  if (demoStatus !== 'pass') throw new Error('Demo failed to initialize')
+  if (await demo.locator('.grid__item').count() !== 10) {
+    throw new Error('Demo did not render ten keyboard-accessible preview buttons')
+  }
+
+  await demo.locator('[data-index="0"]').click()
+  await demo.waitForSelector('.expose[role="dialog"]')
+  await demo.keyboard.press('ArrowRight')
+  await demo.waitForFunction(
+    () => document.querySelector('.expose__counter-num')?.textContent === '2',
+    null, { timeout: 5_000 },
+  )
+  await demo.locator('.expose__toolbar-btn[aria-label="Close"]').click()
+  await demo.waitForSelector('.expose', { state: 'detached' })
+
+  await demo.locator('#preload').selectOption('0')
+  await demo.locator('#optZoom').check()
+  await demo.locator('#openAt3').click()
+  await demo.waitForSelector('.expose')
+  await demo.locator('#addSlide').click()
+  if (await demo.locator('.grid__item').count() !== 11) {
+    throw new Error('Demo failed to add a slide')
+  }
+  await demo.locator('#removeSlide').click()
+  if (await demo.locator('.grid__item').count() !== 10) {
+    throw new Error('Demo failed to remove the current slide')
+  }
+  await demo.locator('#destroyGallery').click()
+  await demo.waitForSelector('.expose', { state: 'detached' })
+  if (demoErrors.length) throw new Error(`Demo script errors: ${demoErrors.join('; ')}`)
+  console.log('Root demo smoke passed: previews, keyboard navigation, dynamic slides and teardown')
 } finally {
   await browser?.close()
   server.kill('SIGTERM')

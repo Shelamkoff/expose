@@ -27,7 +27,9 @@ Import the required stylesheet once:
 import '@shelamkoff/expose/styles.css'
 ```
 
-The package installs `@shelamkoff/event-bus` automatically as a dependency.\n\n`exposeStylesUrl` is exported for hosts that create their own `<link>` element.
+The package installs `@shelamkoff/event-bus` automatically as a dependency.
+
+`exposeStylesUrl` is exported for hosts that create their own `<link>` element.
 
 ## Quick start
 
