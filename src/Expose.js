@@ -1070,6 +1070,7 @@ export class Expose {
   /** Keep only the selected slide and its configured preload window. */
   #evictOutsideWindow() {
     if (this.#currentIndex < 0) return
+    const generation = this.#lifecycleVersion
     const keep = new Set([this.#currentIndex])
     const preload = Math.min(this.#options.preload ?? 1, Math.max(0, this.#slides.length - 1))
     for (let offset = 1; offset <= preload; offset++) {
@@ -1082,7 +1083,9 @@ export class Expose {
       if (keep.has(index)) continue
       this.#slideElements.delete(index)
       this.#disposeSlideEntry(entry)
-      if (this.#destroyed || this.#closing) return
+      // Cleanup callbacks may synchronously replace the slide collection.
+      // The old eviction window must not consume the new generation's DOM.
+      if (this.#destroyed || this.#closing || this.#lifecycleVersion !== generation) return
     }
   }
 
@@ -1150,7 +1153,11 @@ export class Expose {
     if (this.#slideElements.has(this.#currentIndex)) {
       this.#showSlide(this.#currentIndex)
       this.#preloadNeighbors()
+      if (this.#destroyed || !this.#isOpen || this.#closing
+        || this.#lifecycleVersion !== lifecycleVersion) return
       this.#evictOutsideWindow()
+      if (this.#destroyed || !this.#isOpen || this.#closing
+        || this.#lifecycleVersion !== lifecycleVersion) return
       this.#updateToolbar()
       this.#events.emit('slide:change', {
         index: this.#currentIndex,
