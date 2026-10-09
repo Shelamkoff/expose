@@ -592,3 +592,38 @@ test('an explicit empty iframe sandbox is enforced instead of omitted', async ()
       'empty sandbox is a security boundary; omitting it grants the iframe more permissions')
   } finally { gallery.destroy() }
 }))
+
+test('empty replacement still closes when a change listener adds a slide', async () => withDOM(async ({ document }) => {
+  const gallery = new Expose(slides(2), { animation: 'none', preload: 0 })
+  gallery.on('slides:change', ({ slides: current }) => {
+    if (current.length === 0) gallery.addSlide({ src: '/replenished.jpg' })
+  })
+  try {
+    await gallery.open()
+    gallery.setSlides([])
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(gallery.isOpen(), false, 'setSlides([]) must close even when a listener adds a slide')
+    assert.equal(document.querySelector('.expose'), null)
+    assert.equal(gallery.getSlides().length, 1)
+    await gallery.open()
+    assert.equal(gallery.getSlide()?.src, '/replenished.jpg')
+  } finally { gallery.destroy() }
+}))
+
+test('slide:change reentrancy replaces once and suppresses stale collection event', async () => withDOM(async () => {
+  const gallery = new Expose(slides(2), { animation: 'none', preload: 0 })
+  const collections = []
+  const transitions = []
+  gallery.on('slide:change', ({ slide }) => {
+    transitions.push(slide.src)
+    if (slide.src === '/outer.jpg') gallery.setSlides([{ src: '/inner.jpg' }])
+  })
+  gallery.on('slides:change', ({ slides: current }) => collections.push(current[0]?.src))
+  try {
+    await gallery.open()
+    gallery.setSlides([{ src: '/outer.jpg' }])
+    assert.deepEqual(transitions, ['/outer.jpg', '/inner.jpg'])
+    assert.deepEqual(collections, ['/inner.jpg'])
+    assert.equal(gallery.getSlide()?.src, '/inner.jpg')
+  } finally { gallery.destroy() }
+}))
