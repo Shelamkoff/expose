@@ -124,3 +124,46 @@ test('toolbar collisions are rejected at configuration and plugin installation t
   assert.doesNotThrow(() => gallery.use({ name: 'valid-after-failure', install() {} }))
   gallery.destroy()
 })
+
+test('asynchronous plugin installation is rejected rather than silently detached', () => {
+  const gallery = new Expose([])
+  const rejected = Promise.reject(new Error('asynchronous installation rejected'))
+  void rejected.catch(() => {}) // do not let the intentionally rejected fixture escape the test
+  const faulty = {
+    name: 'async-install',
+    install(context) {
+      context.on('open', () => {})
+      context.toolbar.add({ name: 'transient', icon: 'x', onClick() {} })
+      return rejected
+    },
+  }
+  try {
+    assert.throws(() => gallery.use(faulty), /synchronous|Promise|async/i)
+    assert.equal(gallery.getPlugin('async-install'), undefined)
+    assert.doesNotThrow(() => gallery.use({ name: 'fresh', install() {} }))
+  } finally { gallery.destroy() }
+})
+
+test('autoplay stops immediately when slides are reduced to one', () => {
+  const listeners = new Map()
+  const state = { count: 3, index: 0, open: true }
+  const changes = []
+  const plugin = createAutoplay({ interval: 10000 })
+  plugin.install({
+    options: { loop: false },
+    isOpen: () => state.open,
+    getSlideCount: () => state.count,
+    getIndex: () => state.index,
+    next: async () => {},
+    emit: event => changes.push(event),
+    on(event, handler) { listeners.set(event, handler); return () => listeners.delete(event) },
+    toolbar: { add() {}, remove() {}, setToggleState() {} },
+  })
+  try {
+    assert.equal(plugin.start(), true)
+    state.count = 1
+    listeners.get('slides:change')?.()
+    assert.equal(plugin.isActive(), false)
+    assert.equal(changes.filter(event => event === 'autoplay:stop').length, 1)
+  } finally { plugin.destroy() }
+})

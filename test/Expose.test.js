@@ -403,3 +403,35 @@ test('destroying from a close listener avoids animating a removed overlay', asyn
     gallery.destroy()
   }
 }))
+
+test('setSlides while closed preserves a valid selected index and nullable slide contract', async () => withDOM(async () => {
+  const gallery = new Expose(slides(4), { animation: 'none' })
+  try {
+    await gallery.open(3)
+    await gallery.close()
+    gallery.setSlides([{ src: '/replacement.jpg' }])
+    assert.equal(gallery.getIndex(), 0)
+    assert.equal(gallery.getSlide()?.src, '/replacement.jpg')
+    gallery.setSlides([])
+    assert.equal(gallery.getIndex(), -1)
+    assert.equal(gallery.getSlide(), null)
+  } finally { gallery.destroy() }
+}))
+
+test('next and prev on a single slide never emit changes or reload media', async () => withDOM(async ({ document }) => {
+  const gallery = new Expose([
+    { src: { type: 'iframe', url: 'https://example.test/embed' } },
+  ], { animation: 'none' })
+  let changes = 0
+  gallery.on('slide:change', () => { changes++ })
+  try {
+    await gallery.open()
+    const frame = document.querySelector('iframe')
+    const source = frame.src
+    await gallery.next()
+    await gallery.prev()
+    assert.equal(changes, 0)
+    assert.equal(frame.src, source)
+    assert.equal(gallery.getIndex(), 0)
+  } finally { gallery.destroy() }
+}))
