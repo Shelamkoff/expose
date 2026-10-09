@@ -275,6 +275,11 @@ export class Expose {
     ownedPluginInstances.add(plugin)
     try {
       const installed = plugin.install(context)
+      // An installer can synchronously destroy/open its owner. Do not publish
+      // a plugin into a gallery that is no longer eligible for installation.
+      if (this.#destroyed || this.#isOpen) {
+        throw new Error('Expose: plugin installation was invalidated by a lifecycle change')
+      }
       // use() is synchronous by design. Silently accepting Promise-returning
       // installers would leak asynchronous failures and late registrations.
       if (installed && typeof installed.then === 'function') {
@@ -710,7 +715,9 @@ export class Expose {
     if (!Number.isInteger(index)) throw new TypeError('Expose: slide index must be an integer')
     if (index < 0 || index >= this.#slides.length || this.#isAnimating) return
 
-    const generation = this.#lifecycleVersion
+    // Removal is a synchronous mutation transaction. Nested removal or
+    // replacement from a renderer callback invalidates this operation.
+    const generation = ++this.#lifecycleVersion
     const removed = this.#slideElements.get(index)
     if (removed) {
       // Unregister ownership before invoking application-defined teardown.
@@ -743,18 +750,26 @@ export class Expose {
     this.#slideElements = newMap
 
     if (this.#isOpen) {
+      const isCurrent = () => !this.#destroyed && this.#isOpen && !this.#closing
+        && this.#lifecycleVersion === generation && this.#slideContainer !== null
       this.#renderSlide(this.#currentIndex)
+      if (!isCurrent()) return
       this.#showSlide(this.#currentIndex)
       this.#preloadNeighbors()
+      if (!isCurrent()) return
       this.#evictOutsideWindow()
+      if (!isCurrent()) return
       this.#activateMedia(this.#currentIndex)
       this.#syncNavigation()
       this.#updateToolbar()
+      if (!isCurrent()) return
       this.#events.emit('slide:change', {
         index: this.#currentIndex,
         slide: this.#slides[this.#currentIndex],
       })
+      if (!isCurrent()) return
     }
+    if (this.#destroyed || this.#closing || this.#lifecycleVersion !== generation) return
     this.#events.emit('slides:change', { slides: this.getSlides() })
   }
 
