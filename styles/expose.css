@@ -341,3 +341,16 @@
     padding-bottom: 110px;
   }
 }
+
+/* Reduce motion without removing essential controls and affordances. */
+@media (prefers-reduced-motion: reduce) {
+  .expose__image,
+  .expose__slide-transform,
+  .expose__nav::before,
+  .expose__toolbar-btn::before,
+  .expose__thumb,
+  .expose__autoplay-bar--active {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -225,11 +225,11 @@ async function run() {
   assert(iframe.src === 'about:blank', 'outgoing iframe reloaded instead of stopping')
   deferred.destroy()
 
-  const blinds = new Expose(slides.slice(0, 2), { animation: 'blinds', animationDuration: 40, preload: 0 })
+  const blinds = new Expose(slides.slice(0, 2), { animation: 'blinds', animationDuration: 200, preload: 0 })
   await blinds.open()
   const activeBefore = document.querySelector('.expose__slide')
   const moving = blinds.next()
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await new Promise(resolve => setTimeout(resolve, 30))
   assert(activeBefore.style.opacity !== '0', 'blinds hid its own tile layer')
   await moving
   blinds.destroy()
