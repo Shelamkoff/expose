@@ -305,6 +305,10 @@ export class Expose {
     const subscriptions = new Set()
     const toolbarButtons = new Set()
     const swipeClaim = Symbol('swipe-claim')
+    let contextActive = true
+    const assertActive = () => {
+      if (!contextActive) throw new Error('Expose: plugin context is inactive')
+    }
     const trackSubscription = (unsubscribe) => {
       let active = true
       const tracked = () => {
@@ -323,8 +327,12 @@ export class Expose {
     )))
     const context = Object.freeze({
       // Events
-      on: (event, handler) => trackSubscription(this.#events.on(event, handler)),
+      on: (event, handler) => {
+        assertActive()
+        return trackSubscription(this.#events.on(event, handler))
+      },
       once: (event, handler) => {
+        assertActive()
         let tracked
         const unsubscribe = this.#events.once(event, (...args) => {
           tracked?.()
@@ -333,13 +341,16 @@ export class Expose {
         tracked = trackSubscription(unsubscribe)
         return tracked
       },
-      emit: (event, ...args) => this.#events.emit(event, ...args),
+      emit: (event, ...args) => {
+        assertActive()
+        return this.#events.emit(event, ...args)
+      },
 
       // Navigation
-      next: () => this.next(),
-      prev: () => this.prev(),
-      goTo: (index) => this.goTo(index),
-      close: () => this.close(),
+      next: () => { assertActive(); return this.next() },
+      prev: () => { assertActive(); return this.prev() },
+      goTo: (index) => { assertActive(); return this.goTo(index) },
+      close: () => { assertActive(); return this.close() },
 
       // Read-only state
       getIndex: () => this.#currentIndex,
@@ -360,6 +371,7 @@ export class Expose {
       // Toolbar (the registry survives close/open cycles)
       toolbar: Object.freeze({
         add: (button) => {
+          assertActive()
           if (!button || typeof button.name !== 'string' || button.name.trim() === ''
             || typeof button.icon !== 'string' || typeof button.onClick !== 'function') {
             throw new TypeError('Toolbar button requires a non-empty name, an icon, and onClick()')
@@ -375,12 +387,14 @@ export class Expose {
           this.#toolbar?.addButton(config)
         },
         remove: (name) => {
+          assertActive()
           if (!toolbarButtons.has(name)) return
           toolbarButtons.delete(name)
           this.#toolbarButtons.delete(name)
           this.#toolbar?.removeButton(name)
         },
         setToggleState: (name, active) => {
+          assertActive()
           if (toolbarButtons.has(name)) this.#toolbar?.setToggleState(name, active)
         },
       }),
@@ -388,6 +402,7 @@ export class Expose {
       // Scoped gesture ownership; all claims are released on plugin cleanup.
       gestures: Object.freeze({
         setSwipeBlocked: blocked => {
+          assertActive()
           if (blocked) this.#swipeBlocks.add(swipeClaim)
           else this.#swipeBlocks.delete(swipeClaim)
         },
@@ -399,6 +414,8 @@ export class Expose {
     return {
       context,
       cleanup: () => {
+        if (!contextActive) return
+        contextActive = false
         for (const unsubscribe of [...subscriptions]) unsubscribe()
         for (const name of toolbarButtons) {
           this.#toolbarButtons.delete(name)
@@ -465,8 +482,11 @@ export class Expose {
 
     // Render current + preload neighbors
       this.#renderSlide(this.#currentIndex)
+      // A custom renderer can synchronously close or destroy the gallery.
+      if (this.#destroyed || this.#closing || !this.#slideContainer) return
       this.#showSlide(this.#currentIndex)
       this.#preloadNeighbors()
+      if (this.#destroyed || this.#closing || !this.#slideContainer) return
       this.#evictOutsideWindow()
       this.#activateMedia(this.#currentIndex)
 
@@ -982,7 +1002,19 @@ export class Expose {
     const slide = this.#slides[index]
     if (!slide) return
 
+    const container = this.#slideContainer
+    const generation = this.#lifecycleVersion
     const { element, cleanup } = this.#renderer.render(slide)
+
+    // User render callbacks can replace slides or tear down the gallery.
+    // Never attach obsolete content or leak its renderer-owned resources.
+    if (this.#destroyed || this.#closing || this.#slideContainer !== container
+      || this.#lifecycleVersion !== generation || this.#slides[index] !== slide) {
+      try { cleanup?.() } catch (error) {
+        console.error('Expose: abandoned slide cleanup failed', error)
+      }
+      return
+    }
 
     const transformEl = document.createElement('div')
     transformEl.className = 'expose__slide-transform'

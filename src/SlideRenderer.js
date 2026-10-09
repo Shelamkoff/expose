@@ -161,6 +161,12 @@ export class SlideRenderer {
     let cleanup
     try {
       const result = slide.src()
+      if (result && typeof result.then === 'function') {
+        // The renderer contract is synchronous. Observe rejections from a
+        // returned Promise rather than leaking unhandledRejection events.
+        void Promise.resolve(result).catch(() => {})
+        throw new TypeError('Render function must return synchronously, not a Promise')
+      }
 
       let child
       if (result instanceof HTMLElement) {

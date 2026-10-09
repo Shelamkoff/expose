@@ -461,7 +461,7 @@ test('a rejected asynchronous custom renderer is safely observed', async () => w
   try {
     await gallery.open()
     await new Promise(resolve => setImmediate(resolve))
-    assert.match(document.querySelector('.expose__slide').textContent, /Render error/)
+    assert.match(document.querySelector('.expose__slide-content').textContent, /Render error/)
     assert.ok(errors.some(args => String(args[0]).includes('render function failed')))
   } finally {
     gallery.destroy()

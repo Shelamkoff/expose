@@ -158,7 +158,7 @@ const customSlide = {
 }
 ```
 
-A plain string is classified from its URL extension; use an explicit source object when the URL is ambiguous. The optional `preview` property is application metadata used in the online demo; the library uses `thumb` for the thumbnails plugin. A custom renderer may return an `HTMLElement` directly or `{ element, destroy }`.
+A plain string is classified from its URL extension; use an explicit source object when the URL is ambiguous. The optional `preview` property is application metadata used in the online demo; the library uses `thumb` for the thumbnails plugin. A custom renderer may return an `HTMLElement` directly or `{ element, destroy }`. It must do so synchronously; Promise-returning renderers produce a visible render error while their rejected Promises are observed.
 
 ## Configuration
 
@@ -272,7 +272,7 @@ Stop animation-owned timers and frames when the signal aborts. A failing custom 
 - [Download](src/plugins/download/README.md) — slide download/open action.
 - [Fullscreen](src/plugins/fullscreen/README.md) — Fullscreen API integration.
 
-Plugin installation and teardown hooks are synchronous. Returning a Promise from `install()` is rejected; rejected teardown Promises are observed and logged but cannot be awaited by `destroy()`. Plugins may only be installed while the gallery is closed. A stateful plugin instance may belong to one live gallery at a time.
+Plugin installation and teardown hooks are synchronous. Returning a Promise from `install()` is rejected; rejected teardown Promises are observed and logged but cannot be awaited by `destroy()`. Retained plugin contexts become inactive after installation rollback or gallery destruction; using one to register events, toolbar buttons or gestures throws. Plugins may only be installed while the gallery is closed. A stateful plugin instance may belong to one live gallery at a time.
 
 ## Creating a plugin
 
