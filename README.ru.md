@@ -18,7 +18,7 @@
 ## Установка
 
 ```bash
-npm install @shelamkoff/expose @shelamkoff/event-bus
+npm install @shelamkoff/expose
 ```
 
 Один раз подключите обязательные стили:
@@ -323,7 +323,7 @@ npm install
 npm run demo
 ```
 
-Откройте `http://127.0.0.1:4173/demo.html`.
+Откройте `http://127.0.0.1:4173/`.
 
 ## Проверка качества
 
@@ -336,7 +336,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-`npm run check` запускает все четыре проверки после установки Chromium. На ветке `main` те же проверки выполняются GitHub Actions.
+`npm run check` запускает все четыре проверки после установки Chromium. На ветке `master` те же проверки выполняются GitHub Actions.
 
 ## Экспорты пакета
 

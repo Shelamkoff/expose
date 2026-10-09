@@ -1,14 +1,453 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Live demo of @shelamkoff/expose, a framework-agnostic fullscreen lightbox and media gallery.">
-  <meta http-equiv="refresh" content="0; url=./demo.html">
-  <link rel="canonical" href="./demo.html">
-  <title>@shelamkoff/expose demo</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expose — Interactive Media Gallery</title>
+  <meta name="description" content="Interactive Expose lightbox demo: images, video, iframe embeds, zoom, animations, thumbnails and accessible keyboard navigation.">
+  <link rel="canonical" href="https://shelamkoff.github.io/expose/">
+  <meta name="color-scheme" content="dark">
+  <link rel="stylesheet" href="styles/expose.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #e0e0e0;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      padding: 1rem;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+    }
+
+    .controls__group {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: #888;
+    }
+
+    .btn {
+      background: #242424;
+      border: 1px solid #333;
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #333; }
+    .btn--accent { border-color: #5d72de; color: #8b9cf7; }
+    .btn--danger { border-color: #f85782; color: #f85782; }
+
+    select, input[type="checkbox"] {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    .log {
+      font-size: 0.75rem;
+      color: #666;
+      margin-top: 0.5rem;
+      flex-basis: 100%;
+      height: 1.2em;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Image grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .grid__item {
+      border: 1px solid #303030;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      width: 100%;
+      padding: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      background: #1a1a1a;
+    }
+    .grid__item:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid #8b9cf7;
+      outline-offset: 3px;
+    }
+    .grid__item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(255,255,255,0.05);
+    }
+
+    .grid__item img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .grid__placeholder {
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      background: #171717;
+      color: #8b9cf7;
+    }
+    .grid__item-info {
+      padding: 0.6rem 0.8rem;
+      font-size: 0.75rem;
+      color: #999;
+    }
+    .intro { color: #aaa; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.25rem; }
+    .intro a { color: #aabbff; }
+    .controls__group label { cursor: pointer; }
+    .controls__group select { min-width: 90px; }
+    .log { color: #aaa; height: auto; min-height: 1.2em; }
+    .grid__item img { background: #222; }
+    @media (max-width: 680px) {
+      body { padding: 1rem; }
+      .controls { gap: 0.75rem; }
+      .grid { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
+      .grid__item img, .grid__placeholder { height: 140px; min-height: 140px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .grid__item, .btn { transition: none; }
+      .grid__item:hover { transform: none; }
+    }
+  </style>
 </head>
-<body>
-  <p>Opening the <a href="./demo.html">Expose live demo</a>…</p>
+<body data-status="running">
+
+  <h1>Expose — Gallery playground</h1>
+  <p class="intro">Select an animation and plugins, then open a slide. Test the arrow keys, Escape, touch gestures and zoom. Changes to options apply the next time a gallery is opened. <a href="https://github.com/Shelamkoff/expose">Source code</a>.</p>
+
+  <div class="controls">
+    <button class="btn btn--accent" id="openGallery">Open gallery</button>
+    <button class="btn btn--accent" id="openAt3">Open at #4</button>
+    <button class="btn" id="addSlide">Add slide</button>
+    <button class="btn" id="removeSlide">Remove current</button>
+    <button class="btn btn--danger" id="destroyGallery">Destroy</button>
+
+    <div class="controls__group">
+      <label for="animation">Animation:</label>
+      <select id="animation">
+        <option value="fade" selected>fade</option>
+        <option value="slide">slide</option>
+        <option value="zoom-in">zoom-in</option>
+        <option value="flip">flip</option>
+        <option value="scatter">scatter</option>
+        <option value="puzzle">puzzle</option>
+        <option value="cube">cube</option>
+        <option value="stack">stack</option>
+        <option value="wipe">wipe</option>
+        <option value="iris">iris</option>
+        <option value="blinds">blinds</option>
+        <option value="blur">blur</option>
+        <option value="drop">drop</option>
+        <option value="rotate">rotate</option>
+        <option value="fold">fold</option>
+        <option value="swirl">swirl</option>
+        <option value="glitch">glitch</option>
+        <option value="none">none</option>
+      </select>
+    </div>
+
+    <div class="controls__group">
+      <label for="preload">Preload:</label>
+      <select id="preload">
+        <option value="0">0</option>
+        <option value="1" selected>1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+      </select>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optLoop" checked> Loop</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optFullscreen" checked> Fullscreen</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optDownload" checked> Download</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optTransform" checked> Transform</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optZoom"> Zoom</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optCaptions" checked> Captions</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optThumbs"> Thumbnails</label>
+    </div>
+    <div class="controls__group">
+      <label><input type="checkbox" id="optAutoplay"> Autoplay</label>
+    </div>
+
+    <div class="log" id="log" role="status" aria-live="polite">Ready</div>
+  </div>
+
+  <div class="grid" id="grid" aria-label="Demo slides"></div>
+
+  <script type="importmap">
+    { "imports": { "@shelamkoff/event-bus": "https://cdn.jsdelivr.net/npm/@shelamkoff/event-bus@1.0.0/+esm" } }
+  </script>
+  <script type="module">
+    import {
+      Expose,
+      createCaptions,
+      createZoom,
+      createThumbnails,
+      createAutoplay,
+      createTransform,
+      createDownload,
+      createFullscreen,
+    } from './src/index.js'
+
+    // ── Log ──
+    const logEl = document.getElementById('log')
+    function log(msg) { logEl.textContent = msg }
+
+    // ── Slides data ──
+    const slides = [
+      {
+        src: 'https://picsum.photos/seed/expose1/800/600',
+        caption: 'Mountain landscape at sunset',
+        alt: 'Mountain landscape',
+      },
+      {
+        src: 'https://picsum.photos/seed/expose2/900/700',
+        caption: 'City skyline at night',
+        alt: 'City skyline',
+      },
+      {
+        src: 'https://picsum.photos/seed/expose3/700/900',
+        caption: 'Portrait orientation — tall image',
+        alt: 'Tall image',
+      },
+      {
+        src: 'https://picsum.photos/seed/expose4/1200/600',
+        caption: 'Ultra-wide panoramic shot',
+        alt: 'Panorama',
+      },
+      {
+        src: 'https://picsum.photos/seed/expose5/800/800',
+        caption: 'Square composition',
+        alt: 'Square',
+      },
+      {
+        src: {
+          type: 'video',
+          url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+          autoplay: false,
+          muted: true,
+          poster: 'https://picsum.photos/seed/vidposter/800/450',
+        },
+        caption: 'Sample video with poster',
+      },
+      {
+        src: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        caption: 'YouTube iframe embed',
+        preview: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      },
+      {
+        src: () => {
+          const el = document.createElement('div')
+          el.style.cssText = 'padding:2rem;text-align:center;max-width:500px'
+          el.innerHTML = `
+            <h2 style="margin-bottom:1rem;color:#8b9cf7">Custom Render Slide</h2>
+            <p style="line-height:1.6;color:#bbb">
+              This slide was created with a <code>render</code> function.
+              You can put any dynamic content here — charts, interactive widgets, forms, etc.
+            </p>
+            <button class="custom-btn" style="margin-top:1rem;padding:0.5rem 1.5rem;background:#5d72de;border:none;color:#fff;border-radius:6px;cursor:pointer;font-size:0.9rem">
+              Click me!
+            </button>
+            <p class="custom-output" style="margin-top:0.5rem;color:#666;font-size:0.8rem"></p>
+          `
+          let count = 0
+          const btn = el.querySelector('.custom-btn')
+          const out = el.querySelector('.custom-output')
+          const handler = () => { out.textContent = `Clicked ${++count} time(s)` }
+          btn.addEventListener('click', handler)
+
+          return { element: el, destroy: () => btn.removeEventListener('click', handler) }
+        },
+        caption: 'Custom render function demo',
+        preview: () => {
+          const el = document.createElement('div')
+          el.style.cssText = 'height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;color:#8b9cf7'
+          el.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg><span style="font-size:0.75rem;color:#888">Interactive widget</span>'
+          return el
+        },
+      },
+      {
+        src: 'https://picsum.photos/seed/expose6/800/500',
+        caption: 'Another beautiful photo',
+        alt: 'Photo 6',
+        download: true,
+      },
+      {
+        src: 'https://picsum.photos/seed/expose7/600/800',
+        caption: 'Vertical composition with download',
+        alt: 'Photo 7',
+        download: true,
+      },
+    ]
+
+    // ── Build grid ──
+    const gridEl = document.getElementById('grid')
+
+    function createPreview(slide) {
+      const source = typeof slide.src === 'string' ? slide.src : slide.src?.url
+      const image = typeof slide.preview === 'string' ? slide.preview
+        : (slide.src?.poster ?? (typeof source === 'string' && !source.includes('youtube.com') ? source : null))
+      if (typeof slide.preview === 'function') return slide.preview()
+      if (image) {
+        const img = document.createElement('img')
+        img.src = image
+        img.alt = slide.alt ?? slide.caption ?? 'Gallery preview'
+        img.loading = 'lazy'
+        return img
+      }
+      const placeholder = document.createElement('span')
+      placeholder.className = 'grid__placeholder'
+      placeholder.textContent = typeof slide.src === 'function' ? 'Custom content' : 'Embedded media'
+      return placeholder
+    }
+
+    function renderGrid() {
+      gridEl.replaceChildren()
+      slides.forEach((slide, index) => {
+        const item = document.createElement('button')
+        item.type = 'button'
+        item.className = 'grid__item'
+        item.dataset.index = String(index)
+        item.setAttribute('aria-label', `Open slide ${index + 1}: ${slide.caption || slide.alt || 'Media'}`)
+        item.appendChild(createPreview(slide))
+        const info = document.createElement('span')
+        info.className = 'grid__item-info'
+        info.style.display = 'block'
+        info.textContent = `#${index + 1} — ${slide.caption || slide.alt || 'Media'}`
+        item.appendChild(info)
+        item.addEventListener('click', () => { void createAndOpen(index) })
+        gridEl.appendChild(item)
+      })
+    }
+
+    // ── Gallery instance ──
+    let gallery = null
+
+    const PLUGIN_MAP = {
+      optFullscreen: createFullscreen,
+      optDownload:   createDownload,
+      optTransform:  createTransform,
+      optZoom:       createZoom,
+      optCaptions:   createCaptions,
+      optThumbs:     createThumbnails,
+      optAutoplay:   createAutoplay,
+    }
+
+    function buildPlugins() {
+      const plugins = []
+      for (const [id, factory] of Object.entries(PLUGIN_MAP)) {
+        if (document.getElementById(id).checked) {
+          plugins.push(factory())
+        }
+      }
+      return plugins
+    }
+
+    async function createAndOpen(index = 0) {
+      try {
+        gallery?.destroy()
+        gallery = new Expose(slides, {
+          animation: document.getElementById('animation').value,
+          preload: Number(document.getElementById('preload').value),
+          loop: document.getElementById('optLoop').checked,
+          toolbar: ['counter'],
+          plugins: buildPlugins(),
+        })
+        gallery.on('open', ({ index }) => log(`Opened at #${index + 1}`))
+        gallery.on('close', () => log('Closed'))
+        gallery.on('slide:change', ({ index }) => log(`Slide changed to #${index + 1}`))
+        gallery.on('zoom:change', ({ scale }) => log(`Zoom: ${scale.toFixed(2)}x`))
+        gallery.on('fullscreen:change', ({ active }) => log(`Fullscreen: ${active}`))
+        await gallery.open(index)
+      } catch (error) {
+        log(`Gallery error: ${error instanceof Error ? error.message : String(error)}`)
+        console.error('Expose demo failed', error)
+        document.body.dataset.status = 'fail'
+      }
+    }
+
+    // ── Controls ──
+    document.getElementById('openGallery').addEventListener('click', () => { void createAndOpen(0) })
+    document.getElementById('openAt3').addEventListener('click', () => { void createAndOpen(3) })
+    document.getElementById('addSlide').addEventListener('click', () => {
+      const number = slides.length + 1
+      const slide = {
+        src: `https://picsum.photos/seed/expose-added-${number}/800/600`,
+        caption: `Dynamically added image #${number}`,
+        alt: `Added image #${number}`,
+      }
+      slides.push(slide)
+      gallery?.addSlide(slide)
+      renderGrid()
+      log(`Added slide #${number}`)
+    })
+    document.getElementById('removeSlide').addEventListener('click', () => {
+      if (slides.length === 0) return
+      const index = gallery?.isOpen() ? gallery.getIndex() : slides.length - 1
+      if (index < 0) return
+      try {
+        gallery?.removeSlide(index)
+        slides.splice(index, 1)
+        renderGrid()
+        log(`Removed slide #${index + 1}`)
+      } catch (error) {
+        log(`Remove failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    })
+    document.getElementById('destroyGallery').addEventListener('click', () => {
+      gallery?.destroy()
+      gallery = null
+      log('Gallery destroyed')
+    })
+    renderGrid()
+    document.body.dataset.status = 'pass'
+  </script>
 </body>
 </html>

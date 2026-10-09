@@ -18,7 +18,7 @@ Framework-agnostic fullscreen lightbox and media gallery for images, video, ifra
 ## Installation
 
 ```bash
-npm install @shelamkoff/expose @shelamkoff/event-bus
+npm install @shelamkoff/expose
 ```
 
 Import the required stylesheet once:
@@ -27,7 +27,7 @@ Import the required stylesheet once:
 import '@shelamkoff/expose/styles.css'
 ```
 
-`exposeStylesUrl` is exported for hosts that create their own `<link>` element.
+The package installs `@shelamkoff/event-bus` automatically as a dependency.\n\n`exposeStylesUrl` is exported for hosts that create their own `<link>` element.
 
 ## Quick start
 
@@ -153,7 +153,7 @@ const customSlide = {
 }
 ```
 
-A plain string is classified from its URL extension; use an explicit source object when the URL is ambiguous. A custom renderer may return an `HTMLElement` directly or `{ element, destroy }`.
+A plain string is classified from its URL extension; use an explicit source object when the URL is ambiguous. The optional `preview` property is application metadata used in the online demo; the library uses `thumb` for the thumbnails plugin. A custom renderer may return an `HTMLElement` directly or `{ element, destroy }`.
 
 ## Configuration
 
@@ -323,7 +323,7 @@ npm install
 npm run demo
 ```
 
-Open `http://127.0.0.1:4173/demo.html`.
+Open `http://127.0.0.1:4173/`.
 
 ## Verification
 
@@ -336,7 +336,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-`npm run check` runs all four checks after Chromium is installed. GitHub Actions runs the same verification on `main`.
+`npm run check` runs all four checks after Chromium is installed. GitHub Actions runs the same verification on `master`.
 
 ## Package exports
 
