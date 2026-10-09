@@ -528,3 +528,30 @@ test('renderer cleanup returning a rejected Promise is observed without unhandle
     gallery.destroy()
   }
 }))
+
+test('eviction cleanup may replace the gallery without removing the replacement', async () => withDOM(async ({ document }) => {
+  let gallery
+  let cleanupCalls = 0
+  let slideChanges = 0
+  gallery = new Expose([
+    { src: () => ({
+      element: document.createElement('article'),
+      destroy() {
+        cleanupCalls++
+        gallery.setSlides([{ src: '/replacement.jpg' }])
+      },
+    }) },
+    { src: '/next.jpg' },
+  ], { animation: 'none', preload: 0 })
+  gallery.on('slide:change', () => { slideChanges++ })
+  try {
+    await gallery.open()
+    await gallery.next()
+    assert.equal(cleanupCalls, 1)
+    assert.equal(gallery.getSlide()?.src, '/replacement.jpg')
+    assert.equal(document.querySelectorAll('.expose__slide').length, 1,
+      'stale eviction removed the replacement slide')
+    assert.equal(document.querySelector('.expose__slide').style.display, '')
+    assert.equal(slideChanges, 1, 'obsolete transition emitted a second slide change')
+  } finally { gallery.destroy() }
+}))
