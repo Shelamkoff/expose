@@ -656,7 +656,10 @@ export class Expose {
       if (this.#slides.length === 0) {
         this.#currentIndex = -1
         this.#events.emit('slides:change', { slides: [] })
-        if (isCurrent() && this.#slides.length === 0) void this.close()
+        // An empty replacement is an explicit close request. A listener
+        // may append another slide synchronously, but that must not leave an
+        // open overlay with currentIndex = -1 and no visible slide.
+        if (isCurrent()) void this.close()
         return
       }
       this.#currentIndex = Math.max(0, Math.min(this.#currentIndex, this.#slides.length - 1))
