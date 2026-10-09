@@ -13,7 +13,7 @@
     "types": []
   },
   "include": [
-    "test/types.consumer.ts",
+    "typecheck/consumer.ts",
     "src/**/*.d.ts"
   ]
 }
