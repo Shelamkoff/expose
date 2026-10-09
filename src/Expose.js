@@ -41,12 +41,19 @@ function validateOptions(options) {
   if (options.plugins !== undefined && !Array.isArray(options.plugins)) {
     throw new TypeError('Expose: plugins must be an array')
   }
+  const toolbarNames = new Set()
   for (const item of options.toolbar) {
-    if (item === 'counter') continue
+    if (item === 'counter') {
+      if (toolbarNames.has('counter')) throw new TypeError('Expose: duplicate toolbar item "counter"')
+      toolbarNames.add('counter')
+      continue
+    }
     if (!item || typeof item !== 'object' || typeof item.name !== 'string' || item.name.trim() === ''
       || typeof item.icon !== 'string' || typeof item.onClick !== 'function') {
       throw new TypeError('Expose: toolbar items must be "counter" or valid button configs')
     }
+    if (toolbarNames.has(item.name)) throw new TypeError(`Expose: duplicate toolbar item "${item.name}"`)
+    toolbarNames.add(item.name)
   }
   if (typeof options.counterFormat !== 'string') throw new TypeError('Expose: counterFormat must be a string')
   return options
@@ -338,7 +345,9 @@ export class Expose {
             || typeof button.icon !== 'string' || typeof button.onClick !== 'function') {
             throw new TypeError('Toolbar button requires a non-empty name, an icon, and onClick()')
           }
-          if (this.#toolbarButtons.has(button.name)) {
+          if (this.#toolbarButtons.has(button.name) || this.#options.toolbar.some(
+            item => typeof item === 'object' && item !== null && item.name === button.name,
+          )) {
             throw new Error(`Toolbar button "${button.name}" is already registered`)
           }
           const config = { ...button }
@@ -1018,8 +1027,9 @@ export class Expose {
     } catch (error) {
       console.error('Expose: slide transition failed', error)
     } finally {
-      this.#resetTransitionStyles(currentEntry?.el, nextEntry?.el)
-      if (this.#lifecycleVersion === lifecycleVersion) this.#isAnimating = false
+      const stillCurrent = this.#lifecycleVersion === lifecycleVersion
+      this.#resetTransitionStyles(currentEntry?.el, nextEntry?.el, stillCurrent)
+      if (stillCurrent) this.#isAnimating = false
     }
 
     if (this.#destroyed || !this.#isOpen || this.#lifecycleVersion !== lifecycleVersion) return
@@ -1035,14 +1045,14 @@ export class Expose {
     }
   }
 
-  #resetTransitionStyles(current, next) {
+  #resetTransitionStyles(current, next, resetContainer) {
     for (const element of [current, next]) {
       if (!element) continue
       for (const prop of ['opacity', 'transform', 'transform-origin', 'filter', 'clip-path', 'z-index']) {
         element.style.removeProperty(prop)
       }
     }
-    if (this.#slideContainer) this.#slideContainer.style.removeProperty('perspective')
+    if (resetContainer && this.#slideContainer) this.#slideContainer.style.removeProperty('perspective')
   }
 
   #getAnimationName() {
