@@ -337,3 +337,51 @@ test('destroying inside an open listener never attempts to animate a removed ove
     console.error = original
   }
 }))
+
+test('replacing slides from slide:load must cancel obsolete navigation without errors', async () => withDOM(async () => {
+  const gallery = new Expose(slides(3), { animation: 'none', preload: 0 })
+  const errors = []
+  let replaced = false
+  const original = console.error
+  try {
+    await gallery.open()
+    gallery.on('slide:load', ({ index }) => {
+      if (index !== 1 || replaced) return
+      replaced = true
+      gallery.setSlides([{ src: '/replacement-0.jpg' }, { src: '/replacement-1.jpg' }])
+    })
+    console.error = (...args) => { errors.push(args) }
+    await gallery.goTo(1)
+    assert.equal(replaced, true)
+    assert.equal(gallery.getIndex(), 0)
+    assert.equal(gallery.getSlide().src, '/replacement-0.jpg')
+    assert.equal(errors.length, 0, 'obsolete navigation logged a spurious render error')
+    await gallery.goTo(1)
+    assert.equal(gallery.getSlide().src, '/replacement-1.jpg')
+  } finally {
+    console.error = original
+    gallery.destroy()
+  }
+}))
+
+test('interrupting a 3D transition resets shared container perspective', async () => withDOM(async ({ document }) => {
+  Expose.registerAnimation('interrupted-perspective-test', {
+    enter(overlay) { overlay.style.opacity = '1' },
+    exit(overlay) { overlay.style.opacity = '0' },
+    transition(current, _next, _direction, _duration, signal) {
+      current.parentElement.style.perspective = '1200px'
+      return new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }))
+    },
+  })
+  const gallery = new Expose(slides(3), { animation: 'interrupted-perspective-test', preload: 0 })
+  try {
+    await gallery.open()
+    const pending = gallery.next()
+    await new Promise(resolve => setImmediate(resolve))
+    const container = document.querySelector('.expose__slides')
+    assert.equal(container.style.perspective, '1200px')
+    gallery.setSlides(slides(2))
+    await pending
+    assert.equal(container.style.perspective, '')
+  } finally { gallery.destroy() }
+}))
