@@ -196,3 +196,39 @@ test('autoplay stops and reports a rejected navigation', async () => {
     console.error = previousError
   }
 })
+
+test('async failures from plugin destroy do not escape as unhandled rejections', async () => {
+  const previousError = console.error
+  const logged = []
+  console.error = (...args) => logged.push(args)
+  const gallery = new Expose([], {
+    plugins: [{
+      name: 'rejected-destroy',
+      install() {},
+      destroy() { return Promise.reject(new Error('teardown rejected')) },
+    }],
+  })
+  try {
+    assert.doesNotThrow(() => gallery.destroy())
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(logged.length, 1)
+    assert.match(logged[0][0], /failed to destroy/)
+    assert.match(logged[0][1].message, /teardown rejected/)
+  } finally {
+    console.error = previousError
+    gallery.destroy()
+  }
+})
+
+test('failed plugin install preserves its original error despite async destroy failure', async () => {
+  const gallery = new Expose([])
+  try {
+    assert.throws(() => gallery.use({
+      name: 'failed-with-teardown',
+      install() { throw new Error('install failed') },
+      destroy() { return Promise.reject(new Error('teardown failed')) },
+    }), /install failed/)
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(gallery.getPlugin('failed-with-teardown'), undefined)
+  } finally { gallery.destroy() }
+})

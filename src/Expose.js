@@ -6,6 +6,19 @@ import { lockBodyScroll, unlockBodyScroll, resolveType } from './utils.js'
 
 const ownedPluginInstances = new WeakSet()
 
+function destroyPlugin(plugin, onError) {
+  try {
+    const result = plugin.destroy?.()
+    // Teardown is synchronous by contract, but observe erroneous Promise
+    // returns so a rejecting extension cannot create unhandled rejections.
+    if (result && typeof result.then === 'function') {
+      void Promise.resolve(result).catch(onError)
+    }
+  } catch (error) {
+    onError(error)
+  }
+}
+
 /** @type {import('./types').ExposeOptions} */
 const DEFAULTS = {
   loop: true,
@@ -267,7 +280,7 @@ export class Expose {
       }
       this.#plugins.set(plugin.name, { plugin, context, cleanupContext: cleanup })
     } catch (error) {
-      try { plugin.destroy?.() } catch { /* preserve the installation error */ }
+      destroyPlugin(plugin, () => { /* preserve the installation error */ })
       cleanup()
       ownedPluginInstances.delete(plugin)
       throw error
@@ -734,9 +747,7 @@ export class Expose {
     for (let i = plugins.length - 1; i >= 0; i--) {
       const { plugin, cleanupContext } = plugins[i]
       try {
-        plugin.destroy?.()
-      } catch (error) {
-        console.error(`Expose: plugin "${plugin.name}" failed to destroy`, error)
+        destroyPlugin(plugin, error => console.error(`Expose: plugin "${plugin.name}" failed to destroy`, error))
       } finally {
         cleanupContext()
         ownedPluginInstances.delete(plugin)

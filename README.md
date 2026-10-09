@@ -272,7 +272,7 @@ Stop animation-owned timers and frames when the signal aborts. A failing custom 
 - [Download](src/plugins/download/README.md) — slide download/open action.
 - [Fullscreen](src/plugins/fullscreen/README.md) — Fullscreen API integration.
 
-Plugins may only be installed while the gallery is closed. A stateful plugin instance may belong to one live gallery at a time.
+Plugin installation and teardown hooks are synchronous. Returning a Promise from `install()` is rejected; rejected teardown Promises are observed and logged but cannot be awaited by `destroy()`. Plugins may only be installed while the gallery is closed. A stateful plugin instance may belong to one live gallery at a time.
 
 ## Creating a plugin
 
