@@ -520,6 +520,8 @@ export class Expose {
 
     // Notify plugins — they clean up their DOM here
     this.#events.emit('close')
+    // Application code may dispose the gallery from a close listener.
+    if (this.#destroyed || !this.#isOpen || !this.#overlay) return
 
     this.#isAnimating = !interruptingAnimation
     if (!interruptingAnimation) {
