@@ -302,7 +302,7 @@ async function run() {
       fixed.style.left = '20px'
       fixed.style.top = '20px'
       fixed.textContent = 'Fixed action'
-      root.append(editor, fixed)
+      root.append(fixed, editor)
       return root
     },
   }], { animation: 'none', navigation: false })
