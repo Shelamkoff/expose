@@ -1,10 +1,11 @@
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
-import { extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)))
+const rootReal = await realpath(root)
 const host = process.env.HOST ?? '127.0.0.1'
 const port = Number.parseInt(process.env.PORT ?? '4173', 10)
 const requestedEntry = process.argv[2] ?? '/index.html'
@@ -49,11 +50,16 @@ async function resolveRequestPath(requestUrl) {
   if (pathname === '/') pathname = entryPath
   const candidate = resolve(root, `.${pathname}`)
   const fromRoot = relative(root, candidate)
-  if (fromRoot.startsWith('..') || isAbsolute(fromRoot)) return null
+  if (fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) return null
 
   try {
     const info = await stat(candidate)
-    return info.isDirectory() ? join(candidate, 'index.html') : candidate
+    const path = info.isDirectory() ? join(candidate, 'index.html') : candidate
+    const real = await realpath(path)
+    const relativeReal = relative(rootReal, real)
+    if (relativeReal === '..' || relativeReal.startsWith(`..${sep}`) || isAbsolute(relativeReal)) return null
+    const target = await stat(real)
+    return target.isFile() ? real : null
   } catch {
     return null
   }
@@ -80,7 +86,12 @@ const server = createServer(async (request, response) => {
     response.end()
     return
   }
-  createReadStream(filePath).pipe(response)
+  const stream = createReadStream(filePath)
+  stream.on('error', error => {
+    console.error('Expose demo: file stream failed', error)
+    response.destroy(error)
+  })
+  stream.pipe(response)
 })
 
 server.on('error', error => {

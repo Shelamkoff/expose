@@ -434,7 +434,7 @@ export class Expose {
     if (!Number.isInteger(raw)) throw new TypeError('Expose: open index must be an integer')
     this.#currentIndex = Math.max(0, Math.min(raw, this.#slides.length - 1))
     this.#isOpen = true
-    const lifecycleVersion = ++this.#lifecycleVersion
+    ++this.#lifecycleVersion
     this.#previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     if (Expose.#openInstances.length === 0) Expose.#rootFocus = this.#previousFocus
 
@@ -462,22 +462,34 @@ export class Expose {
       throw error
     }
 
-    // Enter animation
+    // A synchronous open listener may replace slides, close or destroy the
+    // instance; do not animate a discarded overlay or steal a new transition.
+    if (this.#destroyed || !this.#isOpen || this.#closing || !this.#overlay) return
+    const openingOverlay = this.#overlay
+    if (this.#animationController) {
+      openingOverlay.style.opacity = '1'
+      this.#events.emit('open:complete', { index: this.#currentIndex })
+      return
+    }
+
     this.#isAnimating = true
     const animationController = new AbortController()
     this.#animationController = animationController
     try {
-      await this.#animationManager.enter(this.#overlay, this.#getAnimationName(), animationController.signal)
+      await this.#animationManager.enter(openingOverlay, this.#getAnimationName(), animationController.signal)
     } catch (error) {
-      // Custom animations are an extension boundary; their failure must not lock the gallery.
-      if (this.#overlay) this.#overlay.style.opacity = '1'
+      if (this.#overlay === openingOverlay) openingOverlay.style.opacity = '1'
       console.error('Expose: enter animation failed', error)
     } finally {
-      if (this.#animationController === animationController) this.#animationController = null
-      if (this.#lifecycleVersion === lifecycleVersion) this.#isAnimating = false
+      // A cancelled enter must not unlock a newer navigation transition.
+      if (this.#animationController === animationController) {
+        this.#animationController = null
+        this.#isAnimating = false
+      }
     }
 
-    if (this.#destroyed || !this.#isOpen || this.#lifecycleVersion !== lifecycleVersion) return
+    if (this.#destroyed || !this.#isOpen || this.#closing || this.#overlay !== openingOverlay) return
+    if (animationController.signal.aborted) openingOverlay.style.opacity = '1'
     this.#events.emit('open:complete', { index: this.#currentIndex })
   }
 
@@ -586,6 +598,8 @@ export class Expose {
       this.#animationController = null
       this.#isAnimating = false
       this.#clearSlideElements()
+      // An interrupted 3D transition may leave the shared container tilted.
+      this.#slideContainer?.style.removeProperty('perspective')
       if (this.#slides.length === 0) {
         this.#currentIndex = -1
         this.#events.emit('slides:change', { slides: [] })
@@ -767,18 +781,37 @@ export class Expose {
 
     // Keyboard
     this.#keyHandler = (e) => {
-      if (Expose.#openInstances.at(-1) !== this) return
-      if (e.isComposing) return
+      if (Expose.#openInstances.at(-1) !== this || e.isComposing || e.defaultPrevented) return
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        void this.close()
+        return
+      }
+      if (e.key === 'Tab') {
+        this.#trapFocus(e)
+        return
+      }
+      // Inputs and application editors own their keyboard interactions,
+      // including elements nested within a shadow root.
+      if (e.ctrlKey || e.altKey || e.metaKey) return
+      const target = e.composedPath?.()[0] ?? e.target
+      if (target?.isContentEditable || target?.closest?.(
+        'input, textarea, select, [contenteditable], [role="textbox"]',
+      )) return
+
       switch (e.key) {
-        case 'Escape': e.preventDefault(); this.close(); break
-        case 'Tab': this.#trapFocus(e); break
-        case 'ArrowLeft': e.preventDefault(); this.prev(); break
-        case 'ArrowRight': e.preventDefault(); this.next(); break
-        case 'f': case 'F':
-          if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-            e.preventDefault()
-            this.#events.emit('fullscreen:toggle')
-          }
+        case 'ArrowLeft':
+          e.preventDefault()
+          void this.prev()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          void this.next()
+          break
+        case 'f':
+        case 'F':
+          e.preventDefault()
+          this.#events.emit('fullscreen:toggle')
           break
       }
     }
