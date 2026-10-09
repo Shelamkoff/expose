@@ -29,6 +29,8 @@ import '@shelamkoff/expose/styles.css'
 
 The package installs `@shelamkoff/event-bus` automatically as a dependency.
 
+The static GitHub Pages demo includes a pinned copy of the MIT-licensed EventBus module at `assets/event-bus.js`, so its JavaScript runs without a third-party CDN. The npm package itself continues using the dependency normally.
+
 `exposeStylesUrl` is exported for hosts that create their own `<link>` element.
 
 ## Quick start
