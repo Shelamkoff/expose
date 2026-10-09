@@ -139,7 +139,7 @@ export class SlideRenderer {
 
     if (typeof src === 'object' && src !== null) {
       if (src.allow) iframe.setAttribute('allow', src.allow)
-      if (src.sandbox) iframe.setAttribute('sandbox', src.sandbox)
+      if (src.sandbox !== undefined) iframe.setAttribute('sandbox', src.sandbox)
     }
 
     el.appendChild(iframe)

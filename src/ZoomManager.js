@@ -210,7 +210,7 @@ export class ZoomManager {
   }
 
   #clampTranslation() {
-    if (!this.#target || !this.#container || this.#scale <= this.#minScale) {
+    if (!this.#target || !this.#container || this.#scale <= 1) {
       this.#translateX = 0
       this.#translateY = 0
       return
@@ -242,7 +242,7 @@ export class ZoomManager {
     this.#pointers.set(e.pointerId, e)
     this.#container.setPointerCapture(e.pointerId)
 
-    if (this.#pointers.size === 1 && this.#scale > this.#minScale) {
+    if (this.#pointers.size === 1 && this.#scale > 1) {
       // Start pan
       this.#isPanning = true
       this.#panStartX = e.clientX
@@ -302,7 +302,7 @@ export class ZoomManager {
     if (this.#pointers.size < 2) {
       this.#pinchStartDist = 0
     }
-    if (this.#pointers.size === 1 && this.#scale > this.#minScale) {
+    if (this.#pointers.size === 1 && this.#scale > 1) {
       const remaining = this.#pointers.values().next().value
       this.#isPanning = true
       this.#panStartX = remaining.clientX
@@ -333,7 +333,7 @@ export class ZoomManager {
 
   #syncSwipeOwnership() {
     this.#emitter.setSwipeBlocked?.(
-      this.#scale > this.#minScale || this.#pointers.size > 1 || this.#isPanning,
+      Boolean(this.#target) && (this.#scale > 1 || this.#pointers.size > 1 || this.#isPanning),
     )
   }
 

@@ -315,7 +315,7 @@ The frozen plugin context exposes owned event subscriptions, asynchronous naviga
 
 ## Security boundary
 
-Media URLs are validated before DOM assignment. Active schemes are rejected. Iframe slides accept relative, HTTP, and HTTPS URLs, but not `data:` or `blob:` documents. The host remains responsible for a custom iframe `sandbox` policy. Keyboard events from a focused cross-origin iframe cannot be intercepted by the host page; users can always close the gallery with the toolbar button. Custom render functions and toolbar icon HTML are trusted developer code; validate or sanitize any application data used there.
+Media URLs are validated before DOM assignment. Active schemes are rejected. Iframe slides accept relative, HTTP, and HTTPS URLs, but not `data:` or `blob:` documents. The host remains responsible for a custom iframe `sandbox` policy. Explicit `sandbox: ''` applies the strictest sandbox; omitting the property leaves the iframe unsandboxed. Keyboard events from a focused cross-origin iframe cannot be intercepted by the host page; users can always close the gallery with the toolbar button. Custom render functions and toolbar icon HTML are trusted developer code; validate or sanitize any application data used there.
 
 ## Demo
 

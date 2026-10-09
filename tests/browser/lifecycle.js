@@ -77,6 +77,14 @@ async function run() {
   const highMinZoom = new ZoomManager({ emit() {} }, { zoomMin: 2, zoomMax: 4, zoomStep: 0.5 })
   highMinZoom.attach(highMinContainer)
   assert(highMinImage.style.transform.includes('scale(2)'), 'zoomMin was not applied on attach')
+  const minPointer = (type, x) => highMinContainer.dispatchEvent(new PointerEvent(type, {
+    pointerId: 4, pointerType: 'touch', isPrimary: true, button: 0, clientX: x, clientY: 50,
+  }))
+  minPointer('pointerdown', 50)
+  minPointer('pointermove', 75)
+  assert(highMinImage.style.transform.includes('translate3d(25px'),
+    'zoomMin > 1 should permit panning an image larger than its viewport')
+  minPointer('pointerup', 75)
   highMinContainer.dispatchEvent(new MouseEvent('click', { clientX: 50, clientY: 50, bubbles: true }))
   highMinContainer.dispatchEvent(new MouseEvent('click', { clientX: 50, clientY: 50, bubbles: true }))
   assert(highMinZoom.getScale() === 2.5, 'double-click zoom ignored a configured minimum at 2x')
@@ -246,6 +254,15 @@ async function run() {
   } finally {
     window.matchMedia = originalMatchMedia
   }
+
+  const sandboxed = new Expose([{
+    src: { type: 'iframe', url: '/styles/expose.css', sandbox: '' },
+  }], { animation: 'none', preload: 0 })
+  await sandboxed.open()
+  const restrictedFrame = document.querySelector('.expose__iframe')
+  assert(restrictedFrame?.hasAttribute('sandbox') && restrictedFrame.getAttribute('sandbox') === '',
+    'explicitly empty sandbox was ignored')
+  sandboxed.destroy()
 
   const unsafe = new Expose([{ src: { type: 'iframe', url: 'javascript:alert(1)' } }], { animation: 'none' })
   await unsafe.open()

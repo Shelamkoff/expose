@@ -642,25 +642,31 @@ export class Expose {
         ? -1 : Math.min(this.#currentIndex, this.#slides.length - 1)
     }
     if (this.#isOpen) {
-      // Invalidate a transition that may still complete against the old slide set.
-      this.#lifecycleVersion += 1
+      // A teardown, slide:load, or change handler can replace the collection
+      // again. Obsolete generations must not touch DOM or dispatch events.
+      const generation = ++this.#lifecycleVersion
+      const isCurrent = () => !this.#destroyed && this.#isOpen && !this.#closing
+        && this.#slideContainer !== null && this.#lifecycleVersion === generation
       this.#animationController?.abort()
       this.#animationController = null
       this.#isAnimating = false
       this.#clearSlideElements()
-      // An interrupted 3D transition may leave the shared container tilted.
-      this.#slideContainer?.style.removeProperty('perspective')
+      if (!isCurrent()) return
+      this.#slideContainer.style.removeProperty('perspective')
       if (this.#slides.length === 0) {
         this.#currentIndex = -1
         this.#events.emit('slides:change', { slides: [] })
-        void this.close()
+        if (isCurrent() && this.#slides.length === 0) void this.close()
         return
       }
-      this.#currentIndex = Math.min(this.#currentIndex, this.#slides.length - 1)
+      this.#currentIndex = Math.max(0, Math.min(this.#currentIndex, this.#slides.length - 1))
       this.#renderSlide(this.#currentIndex)
+      if (!isCurrent()) return
       this.#showSlide(this.#currentIndex)
       this.#preloadNeighbors()
+      if (!isCurrent()) return
       this.#evictOutsideWindow()
+      if (!isCurrent()) return
       this.#activateMedia(this.#currentIndex)
       this.#syncNavigation()
       this.#updateToolbar()
@@ -668,6 +674,7 @@ export class Expose {
         index: this.#currentIndex,
         slide: this.#slides[this.#currentIndex],
       })
+      if (!isCurrent()) return
     }
     this.#events.emit('slides:change', { slides: this.getSlides() })
   }
