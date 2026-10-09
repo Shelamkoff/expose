@@ -9,12 +9,14 @@ class FakeElement {
     this.style = {}
     this.dataset = {}
     this.attributes = new Map()
+    this.handlers = new Map()
     this.classList = { add() {}, toggle() {} }
     this._textContent = ''
   }
   appendChild(child) { this.children.push(child); return child }
   append(...children) { this.children.push(...children) }
-  addEventListener() {}
+  addEventListener(type, handler) { this.handlers.set(type, handler) }
+  click() { this.handlers.get('click')?.({ stopPropagation() {} }) }
   setAttribute(name, value) { this.attributes.set(name, value) }
   remove() {}
   get offsetHeight() { return 1 }
@@ -84,6 +86,29 @@ test('toolbar rejects duplicate and malformed extension buttons', () => {
     assert.throws(() => toolbar.addButton({ name: '', icon: '', onClick() {} }), TypeError)
     toolbar.destroy()
   } finally {
+    globalThis.document = previousDocument
+  }
+})
+
+test('toolbar observes asynchronous and synchronous click errors', async () => {
+  const previousDocument = globalThis.document
+  const previousError = console.error
+  const errors = []
+  globalThis.document = { createElement: tag => new FakeElement(tag) }
+  console.error = (...args) => errors.push(args)
+  const toolbar = new Toolbar({ toolbar: [] }, { close() {} })
+  try {
+    toolbar.addButton({ name: 'async', icon: '<svg></svg>', onClick: () => Promise.reject(new Error('async failure')) })
+    toolbar.addButton({ name: 'sync', icon: '<svg></svg>', onClick: () => { throw new Error('sync failure') } })
+    toolbar.element.children[0].click()
+    toolbar.element.children[1].click()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(errors.length, 2)
+    assert.match(errors[0][0], /toolbar action/)
+    assert.match(errors[1][0], /toolbar action/)
+  } finally {
+    toolbar.destroy()
+    console.error = previousError
     globalThis.document = previousDocument
   }
 })
