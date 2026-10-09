@@ -99,7 +99,7 @@ export class SlideRenderer {
     video.preload = 'metadata'
 
     if (typeof src === 'object' && src !== null) {
-      if (src.autoplay) video.autoplay = true
+      if (src.autoplay) video.dataset.exposeAutoplay = 'true'
       if (src.muted) video.muted = true
       if (src.loop) video.loop = true
       const poster = safeMediaUrl(src.poster, 'image')
@@ -130,7 +130,10 @@ export class SlideRenderer {
 
     const iframe = document.createElement('iframe')
     iframe.className = 'expose__iframe'
-    iframe.src = url
+    // Never load preloaded embeds until their slide becomes active.
+    iframe.dataset.exposeSrc = url
+    iframe.dataset.exposeActive = 'false'
+    iframe.src = 'about:blank'
     iframe.setAttribute('frameborder', '0')
     iframe.setAttribute('allowfullscreen', '')
 

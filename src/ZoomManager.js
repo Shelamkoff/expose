@@ -115,6 +115,8 @@ export class ZoomManager {
     this.#container.addEventListener('click', this.#onClick)
 
     this.#container.style.touchAction = 'none'
+    this.#applyTransform()
+    this.#syncSwipeOwnership()
   }
 
   detach() {
@@ -134,6 +136,7 @@ export class ZoomManager {
     this.#pointers.clear()
     this.#isPanning = false
     this.#lastClickTime = 0
+    this.#syncSwipeOwnership()
   }
 
   reset() {
@@ -144,6 +147,7 @@ export class ZoomManager {
     this.#isPanning = false
     this.#pointers.clear()
     this.#applyTransform()
+    this.#syncSwipeOwnership()
   }
 
   /** Zoom in by one step. */
@@ -182,8 +186,8 @@ export class ZoomManager {
       const cy = rect.top + rect.height / 2
 
       const factor = this.#scale / prev
-      this.#translateX = originX - factor * (originX - cx) - cx + this.#translateX * factor
-      this.#translateY = originY - factor * (originY - cy) - cy + this.#translateY * factor
+      this.#translateX += (originX - cx) * (1 - factor)
+      this.#translateY += (originY - cy) * (1 - factor)
     }
 
     // Reset translation if zoomed back to 1x
@@ -194,6 +198,7 @@ export class ZoomManager {
 
     this.#clampTranslation()
     this.#applyTransform()
+    this.#syncSwipeOwnership()
     this.#emitter.emit('zoom:change', { scale: this.#scale })
   }
 
@@ -212,9 +217,8 @@ export class ZoomManager {
     }
 
     const rect = this.#container.getBoundingClientRect()
-    const relativeScale = this.#scale / this.#minScale
-    const maxTX = (relativeScale - 1) * rect.width / 2
-    const maxTY = (relativeScale - 1) * rect.height / 2
+    const maxTX = Math.max(0, (this.#target.offsetWidth * this.#scale - rect.width) / 2)
+    const maxTY = Math.max(0, (this.#target.offsetHeight * this.#scale - rect.height) / 2)
 
     this.#translateX = clamp(this.#translateX, -maxTX, maxTX)
     this.#translateY = clamp(this.#translateY, -maxTY, maxTY)
@@ -253,6 +257,7 @@ export class ZoomManager {
       if (this.#pinchStartDist <= 0) return
       this.#pinchStartScale = this.#scale
     }
+    this.#syncSwipeOwnership()
   }
 
   /** @param {PointerEvent} e */
@@ -307,6 +312,7 @@ export class ZoomManager {
     } else if (this.#pointers.size === 0) {
       this.#isPanning = false
     }
+    this.#syncSwipeOwnership()
   }
 
   #releasePointers() {
@@ -322,6 +328,13 @@ export class ZoomManager {
     this.#pointers.clear()
     this.#pinchStartDist = 0
     this.#isPanning = false
+    this.#syncSwipeOwnership()
+  }
+
+  #syncSwipeOwnership() {
+    this.#emitter.setSwipeBlocked?.(
+      this.#scale > this.#minScale || this.#pointers.size > 1 || this.#isPanning,
+    )
   }
 
   /* ── Double-click toggle ── */

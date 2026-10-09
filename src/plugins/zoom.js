@@ -66,7 +66,10 @@ export function createZoom(options = {}) {
 
       unsubs.push(
         context.on('open', () => {
-          zoomManager = new ZoomManager(context, { zoomMin: min, zoomMax: max, zoomStep: step })
+          zoomManager = new ZoomManager({
+            emit: (...args) => context.emit(...args),
+            setSwipeBlocked: blocked => context.gestures?.setSwipeBlocked(blocked),
+          }, { zoomMin: min, zoomMax: max, zoomStep: step })
           attachZoom()
         }),
 

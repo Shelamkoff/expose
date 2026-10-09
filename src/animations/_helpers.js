@@ -26,10 +26,16 @@ export function cssTransition(el, setup, go, duration, props = 'transform,opacit
       reject(createAbortError())
     }
 
-    setup()
-    el.offsetHeight // eslint-disable-line no-unused-expressions
-    el.style.transition = props.split(',').map(p => `${p.trim()} ${duration}ms ease`).join(',')
-    go()
+    try {
+      setup()
+      el.offsetHeight // eslint-disable-line no-unused-expressions
+      el.style.transition = props.split(',').map(p => `${p.trim()} ${duration}ms ease`).join(',')
+      go()
+    } catch (error) {
+      cleanup()
+      reject(error)
+      return
+    }
     signal?.addEventListener('abort', onAbort, { once: true })
     timer = setTimeout(() => {
       cleanup()
@@ -61,9 +67,14 @@ export function animationFrame(callback, signal) {
 
     signal?.addEventListener('abort', onAbort, { once: true })
     frame = requestAnimationFrame(() => {
-      cleanup()
-      callback()
-      resolve()
+      try {
+        callback()
+        resolve()
+      } catch (error) {
+        reject(error)
+      } finally {
+        cleanup()
+      }
     })
   })
 }

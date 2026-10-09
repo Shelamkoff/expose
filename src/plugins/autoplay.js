@@ -103,7 +103,7 @@ export function createAutoplay(options = {}) {
         return
       }
       await context.next()
-      if (active) schedule(context)
+      if (active && !timer) schedule(context)
     }, interval)
   }
 
@@ -134,7 +134,9 @@ export function createAutoplay(options = {}) {
         }),
 
         context.on('slide:change', () => {
-          if (active) restartBar()
+          if (!active) return
+          schedule(context)
+          restartBar()
         }),
 
         context.on('close', () => {

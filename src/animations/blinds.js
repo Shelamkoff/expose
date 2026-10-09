@@ -14,7 +14,7 @@ AnimationManager.register('blinds', {
     next.style.opacity = '1'
 
     const { grid, tiles } = scatterTiles(img, current, STRIPS, 1)
-    current.style.opacity = '0'
+    img.style.visibility = 'hidden'
     grid.style.perspective = '800px'
 
     try {
@@ -34,7 +34,7 @@ AnimationManager.register('blinds', {
       current.style.display = 'none'
     } finally {
       grid.remove()
-      current.style.opacity = ''
+      img.style.visibility = ''
     }
   },
 })
