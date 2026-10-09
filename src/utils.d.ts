@@ -4,5 +4,5 @@ export function unlockBodyScroll(): void
 export function safeMediaUrl(value: unknown, kind: 'image' | 'video' | 'iframe' | 'download'): string | null
 export function safeImageSrcset(value: unknown): string | null
 export function detectType(url: string): 'image' | 'video' | 'iframe'
-export function extractUrl(src: import('./types').SlideSource): string | null
-export function resolveType(src: import('./types').SlideSource): import('./types').SlideType
+export function extractUrl(src: import('./types.js').SlideSource): string | null
+export function resolveType(src: import('./types.js').SlideSource): import('./types.js').SlideType
