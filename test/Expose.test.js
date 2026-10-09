@@ -435,3 +435,36 @@ test('next and prev on a single slide never emit changes or reload media', async
     assert.equal(gallery.getIndex(), 0)
   } finally { gallery.destroy() }
 }))
+
+test('synchronous destroy inside custom renderer does not crash opening', async () => withDOM(async ({ document }) => {
+  let gallery
+  let rendererDisposed = 0
+  gallery = new Expose([{
+    src: () => {
+      gallery.destroy()
+      return { element: document.createElement('article'), destroy: () => { rendererDisposed++ } }
+    },
+  }], { preload: 0, animation: 'none' })
+  await gallery.open()
+  assert.equal(gallery.isOpen(), false)
+  assert.equal(document.querySelector('.expose'), null)
+  assert.equal(rendererDisposed, 1)
+}))
+
+test('a rejected asynchronous custom renderer is safely observed', async () => withDOM(async ({ document }) => {
+  const errors = []
+  const prior = console.error
+  console.error = (...args) => errors.push(args)
+  const gallery = new Expose([{
+    src: () => Promise.reject(new Error('late render rejection')),
+  }], { animation: 'none', preload: 0 })
+  try {
+    await gallery.open()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.match(document.querySelector('.expose__slide').textContent, /Render error/)
+    assert.ok(errors.some(args => String(args[0]).includes('render function failed')))
+  } finally {
+    gallery.destroy()
+    console.error = prior
+  }
+}))

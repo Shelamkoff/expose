@@ -232,3 +232,34 @@ test('failed plugin install preserves its original error despite async destroy f
     assert.equal(gallery.getPlugin('failed-with-teardown'), undefined)
   } finally { gallery.destroy() }
 })
+
+test('failed plugin installation revokes its captured context', () => {
+  const gallery = new Expose([{ src: '/a.jpg' }])
+  let captured
+  assert.throws(() => gallery.use({
+    name: 'failed-context',
+    install(context) {
+      captured = context
+      context.toolbar.add({ name: 'owned-before-failure', icon: 'x', onClick() {} })
+      throw new Error('failed install')
+    },
+  }), /failed install/)
+  try {
+    assert.throws(() => captured.on('open', () => {}), /inactive|destroyed/i)
+    assert.throws(() => captured.once('open', () => {}), /inactive|destroyed/i)
+    assert.throws(() => captured.emit('open'), /inactive|destroyed/i)
+    assert.throws(() => captured.toolbar.add({ name: 'resurrected', icon: 'x', onClick() {} }), /inactive|destroyed/i)
+    assert.throws(() => captured.gestures.setSwipeBlocked(true), /inactive|destroyed/i)
+    assert.doesNotThrow(() => gallery.use({ name: 'healthy', install() {} }))
+  } finally { gallery.destroy() }
+})
+
+test('destroy revokes the plugin context and cannot restart subscriptions', () => {
+  let captured
+  const gallery = new Expose([])
+  gallery.use({ name: 'captured-context', install(ctx) { captured = ctx } })
+  gallery.destroy()
+  assert.throws(() => captured.on('custom:event', () => {}), /inactive|destroyed/i)
+  assert.throws(() => captured.toolbar.add({ name: 'resurrected', icon: 'x', onClick() {} }), /inactive|destroyed/i)
+  assert.throws(() => captured.gestures.setSwipeBlocked(true), /inactive|destroyed/i)
+})
