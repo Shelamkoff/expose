@@ -164,7 +164,7 @@ A plain string is classified from its URL extension; use an explicit source obje
 | `closeOnBackdrop` | `boolean` | `true` | Closes when the backdrop is clicked. |
 | `animation` | `string` | `'fade'` | Registered animation name. |
 | `animationDuration` | `number` | `300` | Non-negative duration in milliseconds. |
-| `preload` | `number` | `1` | Number of neighboring slides to render ahead on each side. |
+| `preload` | `number` | `1` | Number of neighboring slides retained on each side; slides outside this window are disposed. |
 | `startIndex` | `number` | `0` | Initial index used when `open()` receives no index. |
 | `toolbar` | `ToolbarItem[]` | `[]` | `'counter'` and custom button definitions. |
 | `counterFormat` | `string` | `'{current} / {total}'` | Counter template. |
@@ -195,7 +195,9 @@ Invalid option and slide shapes throw synchronously during construction or mutat
 
 Slide mutations are supported while open, except during closing and the guarded removal case above. Do not use the instance after `destroy()`.
 
-Multiple galleries share a reference-counted body scroll lock. Only the topmost open gallery handles global keyboard input, and focus is restored after closing when possible.
+Multiple galleries share a reference-counted body scroll lock. Only the topmost open gallery handles global keyboard input, and focus is restored to the original host element after the final gallery closes.
+
+Rendered slides are windowed to at most `2 * preload + 1` entries (or the total slide count). Revisited slides may be rendered again; custom renderers should release resources in `destroy()`. Preloaded videos do not autoplay until active, and inactive iframes load `about:blank` until selected. The active animation automatically becomes `none` when the user prefers reduced motion.
 
 ## Events
 
@@ -304,11 +306,11 @@ export function createSharePlugin() {
 }
 ```
 
-The frozen plugin context exposes owned event subscriptions, asynchronous navigation, read-only state and options, live overlay/slide DOM getters, owned toolbar registration, and `resolveType(source)`. Context subscriptions and toolbar registrations are rolled back after failed installation and removed on destruction. The plugin still owns its global listeners, observers, timers, frames, object URLs, third-party objects, and any DOM it creates outside the managed overlay lifecycle.
+The frozen plugin context exposes owned event subscriptions, asynchronous navigation, read-only state and options, live overlay/slide DOM getters, owned toolbar registration, `gestures.setSwipeBlocked(boolean)` for suppressing navigation during plugin-owned pan/pinch gestures, and `resolveType(source)`. Context subscriptions and toolbar registrations are rolled back after failed installation and removed on destruction. The plugin still owns its global listeners, observers, timers, frames, object URLs, third-party objects, and any DOM it creates outside the managed overlay lifecycle.
 
 ## Security boundary
 
-Media URLs are validated before DOM assignment. Active schemes are rejected. Iframe slides accept relative, HTTP, and HTTPS URLs, but not `data:` or `blob:` documents. The host remains responsible for a custom iframe `sandbox` policy. Custom render functions and toolbar icon HTML are trusted developer code; validate or sanitize any application data used there.
+Media URLs are validated before DOM assignment. Active schemes are rejected. Iframe slides accept relative, HTTP, and HTTPS URLs, but not `data:` or `blob:` documents. The host remains responsible for a custom iframe `sandbox` policy. Keyboard events from a focused cross-origin iframe cannot be intercepted by the host page; users can always close the gallery with the toolbar button. Custom render functions and toolbar icon HTML are trusted developer code; validate or sanitize any application data used there.
 
 ## Demo
 
@@ -322,6 +324,19 @@ npm run demo
 ```
 
 Open `http://127.0.0.1:4173/demo.html`.
+
+## Verification
+
+```bash
+npm install
+npm test
+npm run typecheck
+npm run build
+npx playwright install chromium
+npm run test:browser
+```
+
+`npm run check` runs all four checks after Chromium is installed. GitHub Actions runs the same verification on `main`.
 
 ## Package exports
 
