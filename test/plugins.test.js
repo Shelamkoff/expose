@@ -108,3 +108,19 @@ test('autoplay keeps its toolbar toggle inactive when there is only one slide', 
   assert.equal(toggleState, false)
   plugin.destroy()
 })
+
+test('toolbar collisions are rejected at configuration and plugin installation time', () => {
+  const button = { name: 'shared-action', icon: 'x', onClick() {} }
+  assert.throws(() => new Expose([], { toolbar: [button, button] }), /duplicate toolbar item/)
+  const gallery = new Expose([], { toolbar: [button] })
+  const conflicting = {
+    name: 'conflicting-plugin',
+    install(context) {
+      context.toolbar.add({ name: 'shared-action', icon: 'P', onClick() {} })
+    },
+  }
+  assert.throws(() => gallery.use(conflicting), /already registered/)
+  assert.equal(gallery.getPlugin(conflicting.name), undefined)
+  assert.doesNotThrow(() => gallery.use({ name: 'valid-after-failure', install() {} }))
+  gallery.destroy()
+})
