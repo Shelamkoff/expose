@@ -76,6 +76,7 @@ async function run() {
   highMinContainer.hasPointerCapture = () => false
   const highMinZoom = new ZoomManager({ emit() {} }, { zoomMin: 2, zoomMax: 4, zoomStep: 0.5 })
   highMinZoom.attach(highMinContainer)
+  assert(highMinImage.style.transform.includes('scale(2)'), 'zoomMin was not applied on attach')
   highMinContainer.dispatchEvent(new MouseEvent('click', { clientX: 50, clientY: 50, bubbles: true }))
   highMinContainer.dispatchEvent(new MouseEvent('click', { clientX: 50, clientY: 50, bubbles: true }))
   assert(highMinZoom.getScale() === 2.5, 'double-click zoom ignored a configured minimum at 2x')
@@ -196,7 +197,55 @@ async function run() {
   const noPreload = new Expose(slides, { animation: 'none', preload: 0 })
   await noPreload.open()
   assert(document.querySelectorAll('.expose__slide').length === 1, 'preload: 0 rendered neighboring slides')
+  noPreload.removeSlide(0)
+  assert(noPreload.getSlide() === slides[1], 'removing active slide selected incorrect data')
+  assert(document.querySelectorAll('.expose__slide').length === 1, 'removing active slide left empty DOM')
+  assert(document.querySelector('.expose__image')?.src.includes('image/png'), 'replacement image was not rendered')
   noPreload.destroy()
+
+  const manySlides = Array.from({ length: 75 }, (_, i) => ({ src: pixel, alt: String(i) }))
+  const bounded = new Expose(manySlides, { animation: 'none', preload: 1, loop: false })
+  await bounded.open()
+  for (let index = 1; index < manySlides.length; index++) {
+    await bounded.goTo(index)
+    assert(document.querySelectorAll('.expose__slide').length <= 3, 'visited slides were never evicted')
+  }
+  bounded.destroy()
+
+  const deferred = new Expose([
+    { src: { type: 'iframe', url: '/styles/expose.css' } },
+    slides[0],
+  ], { animation: 'none', preload: 1 })
+  await deferred.open(1)
+  const iframe = document.querySelector('.expose__iframe')
+  assert(iframe?.src === 'about:blank', 'preloaded iframe was navigated before activation')
+  await deferred.goTo(0)
+  assert(iframe.src.includes('/styles/expose.css'), 'selected iframe was not activated')
+  await deferred.goTo(1)
+  assert(iframe.src === 'about:blank', 'outgoing iframe reloaded instead of stopping')
+  deferred.destroy()
+
+  const blinds = new Expose(slides.slice(0, 2), { animation: 'blinds', animationDuration: 40, preload: 0 })
+  await blinds.open()
+  const activeBefore = document.querySelector('.expose__slide')
+  const moving = blinds.next()
+  await new Promise(resolve => setTimeout(resolve, 50))
+  assert(activeBefore.style.opacity !== '0', 'blinds hid its own tile layer')
+  await moving
+  blinds.destroy()
+
+  const originalMatchMedia = window.matchMedia
+  window.matchMedia = () => ({ matches: true })
+  try {
+    const reducedMotion = new Expose(slides.slice(0, 2), { animation: 'blinds', animationDuration: 2_000 })
+    await reducedMotion.open()
+    const started = performance.now()
+    await reducedMotion.next()
+    assert(performance.now() - started < 500, 'reduced motion did not bypass animations')
+    reducedMotion.destroy()
+  } finally {
+    window.matchMedia = originalMatchMedia
+  }
 
   const unsafe = new Expose([{ src: { type: 'iframe', url: 'javascript:alert(1)' } }], { animation: 'none' })
   await unsafe.open()
@@ -206,7 +255,7 @@ async function run() {
   assert(activeDocumentListeners() === baselineListeners, 'Expose leaked document listeners')
   assert(!document.querySelector('.expose'), 'Expose leaked an overlay')
   assert(!document.documentElement.classList.contains('expose-noscroll'), 'Expose leaked the body scroll lock')
-  return { flows: 7, listeners: activeDocumentListeners() }
+  return { flows: 12, listeners: activeDocumentListeners() }
 }
 
 try {
