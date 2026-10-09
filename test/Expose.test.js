@@ -385,3 +385,21 @@ test('interrupting a 3D transition resets shared container perspective', async (
     assert.equal(container.style.perspective, '')
   } finally { gallery.destroy() }
 }))
+
+test('destroying from a close listener avoids animating a removed overlay', async () => withDOM(async ({ document }) => {
+  const gallery = new Expose(slides(1), { animation: 'none' })
+  const errors = []
+  const previous = console.error
+  console.error = (...args) => errors.push(args)
+  try {
+    await gallery.open()
+    gallery.on('close', () => gallery.destroy())
+    await gallery.close()
+    assert.equal(gallery.isOpen(), false)
+    assert.equal(document.querySelector('.expose'), null)
+    assert.deepEqual(errors, [])
+  } finally {
+    console.error = previous
+    gallery.destroy()
+  }
+}))
