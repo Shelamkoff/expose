@@ -44,7 +44,7 @@ try {
   console.log('Browser lifecycle passed:', result)
 
   // Exercise the exact root document shipped to GitHub Pages, not merely the
-  // gallery unit-test fixture. CDN module failures surface as missing cards.
+  // gallery unit-test fixture. Local demo module failures surface as missing cards.
   const demo = await browser.newPage()
   const demoErrors = []
   demo.on('pageerror', error => demoErrors.push(error.message))
@@ -76,16 +76,18 @@ try {
   await demo.locator('#optZoom').check()
   await demo.locator('#openAt3').click()
   await demo.waitForSelector('.expose')
-  await demo.locator('#addSlide').click()
+  await demo.waitForFunction(() => document.getElementById('log')?.textContent?.startsWith('Opened at #'))
+  await demo.locator('.expose__toolbar-btn[data-name="demo-add-slide"]').click()
   if (await demo.locator('.grid__item').count() !== 11) {
     throw new Error('Demo failed to add a slide')
   }
-  await demo.locator('#removeSlide').click()
+  await demo.locator('.expose__toolbar-btn[data-name="demo-remove-slide"]').click()
   if (await demo.locator('.grid__item').count() !== 10) {
     throw new Error('Demo failed to remove the current slide')
   }
-  await demo.locator('#destroyGallery').click()
+  await demo.locator('.expose__toolbar-btn[aria-label="Close"]').click()
   await demo.waitForSelector('.expose', { state: 'detached' })
+  await demo.locator('#destroyGallery').click()
   if (demoErrors.length) throw new Error(`Demo script errors: ${demoErrors.join('; ')}`)
   console.log('Root demo smoke passed: previews, keyboard navigation, dynamic slides and teardown')
 } finally {

@@ -397,7 +397,21 @@
           animation: document.getElementById('animation').value,
           preload: Number(document.getElementById('preload').value),
           loop: document.getElementById('optLoop').checked,
-          toolbar: ['counter'],
+          toolbar: [
+            'counter',
+            {
+              name: 'demo-add-slide',
+              title: 'Add slide',
+              icon: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+              onClick: addSlide,
+            },
+            {
+              name: 'demo-remove-slide',
+              title: 'Remove current',
+              icon: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>',
+              onClick: removeSlide,
+            },
+          ],
           plugins: buildPlugins(),
         })
         gallery.on('open:complete', ({ index }) => log(`Opened at #${index + 1}`))
@@ -416,31 +430,44 @@
     // ── Controls ──
     document.getElementById('openGallery').addEventListener('click', () => { void createAndOpen(0) })
     document.getElementById('openAt3').addEventListener('click', () => { void createAndOpen(3) })
-    document.getElementById('addSlide').addEventListener('click', () => {
+    function addSlide() {
       const number = slides.length + 1
       const slide = {
         src: `https://picsum.photos/seed/expose-added-${number}/800/600`,
         caption: `Dynamically added image #${number}`,
         alt: `Added image #${number}`,
       }
-      slides.push(slide)
-      gallery?.addSlide(slide)
-      renderGrid()
-      log(`Added slide #${number}`)
-    })
-    document.getElementById('removeSlide').addEventListener('click', () => {
+      try {
+        gallery?.addSlide(slide)
+        slides.push(slide)
+        renderGrid()
+        log(`Added slide #${number}`)
+      } catch (error) {
+        log(`Add failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    function removeSlide() {
       if (slides.length === 0) return
       const index = gallery?.isOpen() ? gallery.getIndex() : slides.length - 1
       if (index < 0) return
       try {
+        const before = gallery?.getSlides().length
         gallery?.removeSlide(index)
+        if (before !== undefined && gallery.getSlides().length === before) {
+          log('Wait for the transition to finish before removing a slide')
+          return
+        }
         slides.splice(index, 1)
         renderGrid()
         log(`Removed slide #${index + 1}`)
       } catch (error) {
         log(`Remove failed: ${error instanceof Error ? error.message : String(error)}`)
       }
-    })
+    }
+
+    document.getElementById('addSlide').addEventListener('click', addSlide)
+    document.getElementById('removeSlide').addEventListener('click', removeSlide)
     document.getElementById('destroyGallery').addEventListener('click', () => {
       gallery?.destroy()
       gallery = null
