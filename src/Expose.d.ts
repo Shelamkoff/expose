@@ -22,16 +22,19 @@ export class Expose {
     event: E,
     handler: Handler<ExposeEventMap[E]>,
   ): () => void
+  on(event: string, handler: (...args: any[]) => void): () => void
 
   off<E extends keyof ExposeEventMap & string>(
     event: E,
     handler: Handler<ExposeEventMap[E]>,
   ): void
+  off(event: string, handler: (...args: any[]) => void): void
 
   once<E extends keyof ExposeEventMap & string>(
     event: E,
     handler: Handler<ExposeEventMap[E]>,
   ): () => void
+  once(event: string, handler: (...args: any[]) => void): () => void
 
   /* ── Lifecycle ── */
   open(index?: number): Promise<void>

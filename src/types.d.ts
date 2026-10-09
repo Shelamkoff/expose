@@ -66,7 +66,7 @@ export interface ToolbarButtonConfig {
   toggle?: boolean
   active?: boolean
   visible?(slide: SlideData): boolean
-  onClick(): void
+  onClick(): void | Promise<void>
   onStateChange?(active: boolean): string | void
 }
 
@@ -81,7 +81,7 @@ export interface PluginContext {
   once<K extends ExposeEventName>(event: K, handler: (...args: ExposeEventMap[K]) => void): () => void
   once(event: string, handler: (...args: any[]) => void): () => void
   emit<K extends ExposeEventName>(event: K, ...args: ExposeEventMap[K]): void
-  emit(event: string, data?: unknown): void
+  emit(event: string, ...args: any[]): void
 
   // Navigation
   next(): Promise<void>
@@ -108,6 +108,8 @@ export interface PluginContext {
     remove(name: string): void
     setToggleState(name: string, active: boolean): void
   }
+
+  gestures: { setSwipeBlocked(blocked: boolean): void }
 
   // Utilities
   resolveType(src: SlideSource): SlideType

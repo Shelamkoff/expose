@@ -1,5 +1,6 @@
 export interface ZoomEmitter {
   emit(event: string, data?: any): void
+  setSwipeBlocked?(blocked: boolean): void
 }
 
 export interface ZoomManagerOptions {

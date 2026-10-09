@@ -8,8 +8,8 @@
 import type { ExposePlugin } from '../types.js'
 
 export interface AutoplayPlugin extends ExposePlugin {
-    start(): void
-    stop(): void
+    start(): boolean
+    stop(): boolean
     toggle(): void
     isActive(): boolean
 }

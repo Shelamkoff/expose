@@ -1,11 +1,13 @@
-import type { Expose } from './Expose.js'
-import type { ExposeOptions } from './types.js'
+import type { ExposeOptions, SlideData, ToolbarButtonConfig } from './types.js'
 
 export class Toolbar {
-  constructor(gallery: Expose, options: ExposeOptions)
+  constructor(options: ExposeOptions, callbacks: { close(): void | Promise<void> })
   get element(): HTMLElement
+  appendCloseButton(): void
+  addButton(button: ToolbarButtonConfig): void
+  removeButton(name: string): void
   updateCounter(current: number, total: number): void
   setToggleState(name: string, active: boolean): void
-  updateVisibility(slide: import('./types').SlideData): void
+  updateVisibility(slide: SlideData): void
   destroy(): void
 }
