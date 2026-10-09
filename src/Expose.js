@@ -1038,6 +1038,10 @@ export class Expose {
     let nextEntry
     try {
       this.#renderSlide(index)
+      // slide:load callbacks may replace the entire collection or close the
+      // overlay. Never resume navigation with entries from a newer generation.
+      if (this.#lifecycleVersion !== lifecycleVersion || this.#destroyed
+        || !this.#isOpen || this.#closing) return
       currentEntry = this.#slideElements.get(prevIndex)
       nextEntry = this.#slideElements.get(index)
       if (!nextEntry) throw new Error('Expose: navigation target could not be rendered')
