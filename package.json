@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "Framework-agnostic fullscreen lightbox and media gallery with animations, zoom, thumbnails, video, iframes, and composable plugins",
   "type": "module",
-  "sideEffects": ["**/*.css", "**/animations/*.js"],
+  "sideEffects": [
+    "**/*.css",
+    "**/animations/*.js"
+  ],
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
@@ -12,15 +15,25 @@
     "./styles.css": "./dist/styles/expose.css",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "README.md", "README.ru.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "README.ru.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "node scripts/build-package.mjs",
     "demo": "node scripts/dev-server.mjs /demo.html",
     "test": "node --test",
-    "prepublishOnly": "npm test",
-    "prepack": "npm run build"
+    "prepublishOnly": "npm test && npm run typecheck",
+    "prepack": "npm run build",
+    "test:browser": "node scripts/run-browser-tests.mjs",
+    "typecheck": "tsc --project tsconfig.types.json --noEmit",
+    "check": "npm test && npm run typecheck && npm run build && npm run test:browser"
   },
-  "dependencies": { "@shelamkoff/event-bus": "^1.0.0" },
+  "dependencies": {
+    "@shelamkoff/event-bus": "^1.0.0"
+  },
   "keywords": [
     "javascript",
     "gallery",
@@ -38,16 +51,24 @@
     "esm"
   ],
   "author": "Shelamkoff",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Shelamkoff/expose.git"
   },
   "homepage": "https://shelamkoff.github.io/expose/",
-  "bugs": { "url": "https://github.com/Shelamkoff/expose/issues" },
+  "bugs": {
+    "url": "https://github.com/Shelamkoff/expose/issues"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0",
+    "typescript": "^5.9.3"
   }
 }
