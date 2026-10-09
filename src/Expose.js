@@ -258,7 +258,13 @@ export class Expose {
     const { context, cleanup } = this.#createPluginContext()
     ownedPluginInstances.add(plugin)
     try {
-      plugin.install(context)
+      const installed = plugin.install(context)
+      // use() is synchronous by design. Silently accepting Promise-returning
+      // installers would leak asynchronous failures and late registrations.
+      if (installed && typeof installed.then === 'function') {
+        void Promise.resolve(installed).catch(() => {})
+        throw new TypeError('Expose: plugin install() must be synchronous (Promise returned)')
+      }
       this.#plugins.set(plugin.name, { plugin, context, cleanupContext: cleanup })
     } catch (error) {
       try { plugin.destroy?.() } catch { /* preserve the installation error */ }
@@ -548,7 +554,7 @@ export class Expose {
   async next() {
     if (!this.#isOpen || this.#isAnimating || this.#closing) return
     const next = this.#resolveIndex(this.#currentIndex + 1)
-    if (next === null) return
+    if (next === null || next === this.#currentIndex) return
     await this.#goToAnimated(next, 1)
   }
 
@@ -556,7 +562,7 @@ export class Expose {
   async prev() {
     if (!this.#isOpen || this.#isAnimating || this.#closing) return
     const prev = this.#resolveIndex(this.#currentIndex - 1)
-    if (prev === null) return
+    if (prev === null || prev === this.#currentIndex) return
     await this.#goToAnimated(prev, -1)
   }
 
@@ -577,7 +583,7 @@ export class Expose {
 
   /** @returns {import('./types').SlideData | null} */
   getSlide() {
-    return this.#currentIndex >= 0 ? this.#slides[this.#currentIndex] : null
+    return this.#currentIndex >= 0 ? this.#slides[this.#currentIndex] ?? null : null
   }
 
   /** @returns {import('./types').SlideData[]} */
@@ -593,6 +599,12 @@ export class Expose {
     if (!Array.isArray(slides)) throw new TypeError('Expose: slides must be an array')
     slides.forEach(validateSlide)
     this.#slides = [...slides]
+    // Closed galleries retain the selection, but it must remain valid after
+    // replacing the collection with a shorter (or empty) one.
+    if (!this.#isOpen) {
+      this.#currentIndex = this.#slides.length === 0
+        ? -1 : Math.min(this.#currentIndex, this.#slides.length - 1)
+    }
     if (this.#isOpen) {
       // Invalidate a transition that may still complete against the old slide set.
       this.#lifecycleVersion += 1

@@ -54,9 +54,14 @@ export function createAutoplay(options = {}) {
     hideBar()
   }
 
+  function isAtEnd(context) {
+    const count = context.getSlideCount()
+    return count <= 1 || (!context.options?.loop && context.getIndex() >= count - 1)
+  }
+
   function start() {
     if (active) return true
-    if (!ctx?.isOpen() || ctx.getSlideCount() <= 1) {
+    if (!ctx?.isOpen() || isAtEnd(ctx)) {
       syncInactiveUi()
       return false
     }
@@ -97,8 +102,7 @@ export function createAutoplay(options = {}) {
     timer = setTimeout(async () => {
       timer = null
       if (!active || !context.isOpen()) return
-      const slideCount = context.getSlideCount()
-      if (slideCount <= 1 || (!context.options.loop && context.getIndex() >= slideCount - 1)) {
+      if (isAtEnd(context)) {
         stop()
         return
       }
@@ -135,6 +139,20 @@ export function createAutoplay(options = {}) {
 
         context.on('slide:change', () => {
           if (!active) return
+          if (isAtEnd(context)) {
+            stop()
+            return
+          }
+          schedule(context)
+          restartBar()
+        }),
+
+        context.on('slides:change', () => {
+          if (!active) return
+          if (isAtEnd(context)) {
+            stop()
+            return
+          }
           schedule(context)
           restartBar()
         }),
