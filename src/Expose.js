@@ -149,6 +149,9 @@ export class Expose {
   /** @type {boolean} */
   #bodyScrollLocked = false
 
+  /** Prevent nested renderer cleanup from releasing one overlay twice. */
+  #releasingResources = false
+
   /** @type {HTMLElement | null} */
   #previousFocus = null
 
@@ -697,13 +700,13 @@ export class Expose {
     if (!Number.isInteger(index)) throw new TypeError('Expose: slide index must be an integer')
     if (index < 0 || index >= this.#slides.length || this.#isAnimating) return
 
+    const generation = this.#lifecycleVersion
     const removed = this.#slideElements.get(index)
     if (removed) {
-      try { removed.cleanup?.() } catch (error) {
-        console.error('Expose: slide cleanup failed', error)
-      }
-      removed.el.remove()
+      // Unregister ownership before invoking application-defined teardown.
       this.#slideElements.delete(index)
+      this.#disposeSlideEntry(removed)
+      if (this.#destroyed || this.#closing || this.#lifecycleVersion !== generation) return
     }
 
     this.#slides.splice(index, 1)
@@ -956,39 +959,55 @@ export class Expose {
   }
 
   #releaseOpenResources() {
-    const wasTopmost = Expose.#openInstances.at(-1) === this
-    const previousFocus = this.#previousFocus
-    this.#teardownDOM()
-    const index = Expose.#openInstances.lastIndexOf(this)
-    if (index !== -1) Expose.#openInstances.splice(index, 1)
-    if (this.#bodyScrollLocked) {
-      unlockBodyScroll()
-      this.#bodyScrollLocked = false
-    }
-
-    if (wasTopmost) {
-      const underneath = Expose.#openInstances.at(-1)
-      if (underneath?.#overlay) {
-        const target = previousFocus?.isConnected && underneath.#overlay.contains(previousFocus)
-          ? previousFocus : underneath.#overlay
-        target.focus({ preventScroll: true })
-      } else if (Expose.#rootFocus?.isConnected) {
-        Expose.#rootFocus.focus({ preventScroll: true })
+    if (this.#releasingResources) return
+    this.#releasingResources = true
+    try {
+      const wasTopmost = Expose.#openInstances.at(-1) === this
+      const previousFocus = this.#previousFocus
+      this.#teardownDOM()
+      const index = Expose.#openInstances.lastIndexOf(this)
+      if (index !== -1) Expose.#openInstances.splice(index, 1)
+      if (this.#bodyScrollLocked) {
+        unlockBodyScroll()
+        this.#bodyScrollLocked = false
       }
+
+      if (wasTopmost) {
+        const underneath = Expose.#openInstances.at(-1)
+        if (underneath?.#overlay) {
+          const target = previousFocus?.isConnected && underneath.#overlay.contains(previousFocus)
+            ? previousFocus : underneath.#overlay
+          target.focus({ preventScroll: true })
+        } else if (Expose.#rootFocus?.isConnected) {
+          Expose.#rootFocus.focus({ preventScroll: true })
+        }
+      }
+      if (Expose.#openInstances.length === 0) Expose.#rootFocus = null
+    } finally {
+      this.#releasingResources = false
     }
-    if (Expose.#openInstances.length === 0) Expose.#rootFocus = null
   }
 
+  /** Revoke ownership before calling arbitrary renderer teardown. */
   #clearSlideElements() {
-    for (const [, entry] of this.#slideElements) {
-      try {
-        entry.cleanup?.()
-      } catch (error) {
-        console.error('Expose: slide cleanup failed', error)
+    const entries = [...this.#slideElements.values()]
+    this.#slideElements.clear()
+    for (const entry of entries) this.#disposeSlideEntry(entry)
+  }
+
+  #disposeSlideEntry(entry) {
+    try {
+      const pending = entry.cleanup?.()
+      if (pending && typeof pending.then === 'function') {
+        void Promise.resolve(pending).catch(error => {
+          console.error('Expose: slide cleanup failed', error)
+        })
       }
+    } catch (error) {
+      console.error('Expose: slide cleanup failed', error)
+    } finally {
       entry.el.remove()
     }
-    this.#slideElements.clear()
   }
 
   /* ═══════════════ Slides ═══════════════ */
@@ -1010,9 +1029,7 @@ export class Expose {
     // Never attach obsolete content or leak its renderer-owned resources.
     if (this.#destroyed || this.#closing || this.#slideContainer !== container
       || this.#lifecycleVersion !== generation || this.#slides[index] !== slide) {
-      try { cleanup?.() } catch (error) {
-        console.error('Expose: abandoned slide cleanup failed', error)
-      }
+      this.#disposeSlideEntry({ el: element, cleanup })
       return
     }
 
@@ -1063,11 +1080,9 @@ export class Expose {
     }
     for (const [index, entry] of this.#slideElements) {
       if (keep.has(index)) continue
-      try { entry.cleanup?.() } catch (error) {
-        console.error('Expose: slide cleanup failed', error)
-      }
-      entry.el.remove()
       this.#slideElements.delete(index)
+      this.#disposeSlideEntry(entry)
+      if (this.#destroyed || this.#closing) return
     }
   }
 
