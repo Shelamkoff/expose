@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AnimationManager } from '../src/AnimationManager.js'
-import { animationDelay, cssTransition } from '../src/animations/_helpers.js'
+import { animationDelay, animationFrame, cssTransition } from '../src/animations/_helpers.js'
 
 test('animation extension boundary validates duration and contract', () => {
   assert.throws(() => new AnimationManager(-1), RangeError)
@@ -44,4 +44,20 @@ test('built-in animation primitives cancel pending DOM work on abort', async () 
   const delay = animationDelay(1_000, delayController.signal)
   delayController.abort()
   await assert.rejects(delay, { name: 'AbortError' })
+})
+
+test('requestAnimationFrame helper rejects thrown callback errors', async () => {
+  const previous = globalThis.requestAnimationFrame
+  globalThis.requestAnimationFrame = callback => {
+    queueMicrotask(() => callback(0))
+    return 1
+  }
+  try {
+    await assert.rejects(
+      animationFrame(() => { throw new Error('frame exception') }),
+      /frame exception/,
+    )
+  } finally {
+    globalThis.requestAnimationFrame = previous
+  }
 })
