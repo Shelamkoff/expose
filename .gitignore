@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.tgz
 .npm-cache/
+coverage/
+playwright-report/
+test-results/
+.DS_Store

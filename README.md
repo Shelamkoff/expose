@@ -1,5 +1,6 @@
 # @shelamkoff/expose
 
+[![Quality](https://github.com/Shelamkoff/expose/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/Shelamkoff/expose/actions/workflows/quality.yml)
 [![npm version](https://img.shields.io/npm/v/%40shelamkoff%2Fexpose)](https://www.npmjs.com/package/@shelamkoff/expose)
 [![Live demo](https://img.shields.io/badge/demo-live-4357b4)](https://shelamkoff.github.io/expose/)
 [![MIT license](https://img.shields.io/badge/license-MIT-2ea44f)](./LICENSE)

@@ -1,5 +1,6 @@
 # @shelamkoff/expose
 
+[![Quality](https://github.com/Shelamkoff/expose/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/Shelamkoff/expose/actions/workflows/quality.yml)
 [![версия npm](https://img.shields.io/npm/v/%40shelamkoff%2Fexpose)](https://www.npmjs.com/package/@shelamkoff/expose)
 [![Онлайн-демо](https://img.shields.io/badge/demo-live-4357b4)](https://shelamkoff.github.io/expose/)
 [![Лицензия MIT](https://img.shields.io/badge/license-MIT-2ea44f)](./LICENSE)
@@ -313,6 +314,8 @@ export function createSharePlugin() {
 Адреса медиа проверяются до назначения DOM. Активные схемы отклоняются. Встроенные страницы допускают относительные, HTTP- и HTTPS-адреса, но не документы `data:` и `blob:`. Политика пользовательского `sandbox` остаётся ответственностью приложения. Клавиши из сфокусированного iframe другого происхождения не могут обрабатываться родительской страницей браузера; закрыть галерею можно кнопкой панели. Функции рендеринга и HTML иконок считаются доверенным кодом разработчика; проверяйте или очищайте используемые там данные приложения.
 
 ## Демо
+
+Онлайн-демо использует локальную копию MIT-модуля EventBus (`assets/event-bus.js`) и не требует стороннего CDN для загрузки JavaScript. Сам npm-пакет продолжает использовать зависимость `@shelamkoff/event-bus`.
 
 [Откройте онлайн-демо](https://shelamkoff.github.io/expose/), чтобы проверить разные типы слайдов, анимации, действия панели и встроенные плагины.
 
