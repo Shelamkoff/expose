@@ -400,7 +400,7 @@
           toolbar: ['counter'],
           plugins: buildPlugins(),
         })
-        gallery.on('open', ({ index }) => log(`Opened at #${index + 1}`))
+        gallery.on('open:complete', ({ index }) => log(`Opened at #${index + 1}`))
         gallery.on('close', () => log('Closed'))
         gallery.on('slide:change', ({ index }) => log(`Slide changed to #${index + 1}`))
         gallery.on('zoom:change', ({ scale }) => log(`Zoom: ${scale.toFixed(2)}x`))

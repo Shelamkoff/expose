@@ -49,15 +49,21 @@ try {
   const demoErrors = []
   demo.on('pageerror', error => demoErrors.push(error.message))
   await demo.goto(`http://${host}:${port}/`, { waitUntil: 'domcontentloaded' })
-  await demo.waitForFunction(() => document.body.dataset.status !== 'running', null, { timeout: 20_000 })
+  try {
+    await demo.waitForFunction(() => document.body.dataset.status !== 'running', null, { timeout: 10_000 })
+  } catch {
+    throw new Error(`Root demo did not initialize: ${demoErrors.join('; ') || 'module import or parse failure'}`)
+  }
   const demoStatus = await demo.locator('body').getAttribute('data-status')
   if (demoStatus !== 'pass') throw new Error('Demo failed to initialize')
   if (await demo.locator('.grid__item').count() !== 10) {
     throw new Error('Demo did not render ten keyboard-accessible preview buttons')
   }
 
+  await demo.locator('#animation').selectOption('none')
   await demo.locator('[data-index="0"]').click()
   await demo.waitForSelector('.expose[role="dialog"]')
+  await demo.waitForFunction(() => document.getElementById('log')?.textContent?.startsWith('Opened at #'))
   await demo.keyboard.press('ArrowRight')
   await demo.waitForFunction(
     () => document.querySelector('.expose__counter-num')?.textContent === '2',
